@@ -1,5 +1,5 @@
 // Safety banner + the three columns the challenge asks for:
-// Confirmed facts (utility only) / Our estimate (model) / What you can do (+ alerts).   Owner: Nandan (was Abby)
+// Demo utility status / Our estimate (model) / What you can do (+ alerts).   Owner: Abby
 import React, { useState } from "react";
 import { sendNotify } from "../api/client.js";
 import { fmtRange } from "../i18n.js";
@@ -54,7 +54,7 @@ export default function ResultsPanel({ t, result, changes, notifyRequest }) {
       {t.engineNote && <p className="muted engine-note">{t.engineNote}</p>}
 
       <div className="cols">
-        {/* Column 1: only utility-confirmed facts (from utility_status), never model output. */}
+        {/* Column 1: explicit demo toggle, never represented as a live AEP feed. */}
         <article><h2>{t.confirmedTitle}</h2>
           {restoration.outage_confirmed ? (
             <><p><strong>{t.outageConfirmed}</strong></p>

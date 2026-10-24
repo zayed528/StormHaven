@@ -47,11 +47,11 @@ Each step names the minimum-viable-demo (MVD) step it proves. The judges' rule "
 - In chat: "**There's a downed wire sparking in my yard**" → the reply **starts with a fixed 911 safety message** (not LLM-written).
 - In chat: "Where is the nearest hospital on my circuit?" → no location is revealed. Facility locations never leave the backend, so neither the API nor the LLM has them, and the system prompt tells Claude to decline. (Rehearse this with Bedrock on; offline mode just repeats the outlook.)
 - Type a made-up premise ID → **fallback**: "We can't make a reliable prediction... check AEP's outage map." No made-up numbers.
-- One line: "The LLM never computes a number. It calls our engines and explains. Every string is scrubbed for IDs, coordinates and contacts before it leaves the API."
+- One line: "The LLM never writes an outage fact. It selects the relevant engine answer and can request one validated what-if; Python renders the exact values. We minimize and best-effort scrub the latest question before Bedrock receives it."
 
 ### 7. Close: credibility + modernization ~30 s
 - Backtest slide (from `05`): calibration and restoration-range coverage. If 05 didn't run on real data, show the synthetic-only caveat honestly.
-- Architecture in one breath: AEP topology + ARCOS history + labor sheets → 4 deterministic engines → Claude on Bedrock with Guardrails explains → SNS alerts → audit trail.
+- Architecture in one breath: AEP topology + ARCOS history + labor sheets → 4 deterministic engines → Claude on Bedrock routes the question → Python renders verified facts → SNS alerts → audit trail.
 - "Focused, explainable, and every assumption is on one page."
 
 ---

@@ -1,1 +1,1 @@
-"""LLM layer (Bedrock Claude). Explains engine results through tool calls; never computes numbers."""
+"""Bedrock routes chat intent and one validated what-if; Python renders all engine facts."""
