@@ -18,7 +18,7 @@ import numpy as np
 
 from app.config import ASSUMPTIONS
 from app.core.data_loader import DataStore
-from app.core.privacy import friendly_name
+from app.core.privacy import another_name, friendly_name
 from app.core.topology import resolve_location, upline_path
 from app.schemas import Factor, RiskResponse, StormScenario, TrustInfo
 
@@ -35,9 +35,31 @@ class PathRisk:
     probability: float         # P(at least one device on the path fails) = P(you lose power)
 
 
-def severity_multiplier(pct: float) -> float:
-    """m(s) = exp(k*(s-50)/50): 1.0 for a median storm, >1 for worse storms, <1 for milder ones."""
+def severity_multiplier(pct: float, store: DataStore | None = None, for_risk: bool = True) -> float:
+    """How many 'typical storms' this storm is worth: 1.0 for a median storm, >1 worse, <1 milder.
+    Real data: read off the storm-size curve from ARCOS history (meta.json), interpolated in log space and
+    held flat beyond the largest/smallest storm we've seen. For outage PROBABILITY (for_risk=True) it is damped
+    by severity_damping (damage clusters, so fewer distinct customers go out than damage counts suggest);
+    restoration WORKLOAD (for_risk=False) uses the undamped size. Synthetic: m(s) = exp(k*(s-50)/50)."""
+    if store is not None and store.severity_curve:
+        xs, ms = zip(*store.severity_curve)
+        m = float(np.exp(np.interp(pct, xs, np.log(ms))))
+        return m ** CFG["severity_damping"] if for_risk else m
     return math.exp(CFG["severity_k"] * (pct - 50) / 50)
+
+
+def _base_prob(node: dict) -> float:
+    """Per-typical-storm failure prob for a device; the config prior only if the value is missing/NaN.
+    (A plain `or` would wrongly replace a legitimate 0.0 with the prior.)"""
+    fp = node.get("fail_prob")
+    return CFG["prior_failure_prob"] if fp is None or fp != fp else float(fp)
+
+
+def _pct_text(p: float) -> str:
+    """Probability -> plain-language percent that never says '0%' for a small but real risk."""
+    if p < 0.01:
+        return "less than 1%"
+    return f"about {round(p * 100)}%"
 
 
 def band_for(p: float) -> str:
@@ -56,8 +78,8 @@ def compute_path_risk(store: DataStore, premise_id, circuit_id, scenario: StormS
     path = upline_path(store, node)
     g = store.graph
     # Historical per-storm failure prob for each device; devices with no history get the prior.
-    base = np.array([g.nodes[n].get("fail_prob") or CFG["prior_failure_prob"] for n in path])
-    m = severity_multiplier(scenario.severity_percentile)
+    base = np.array([_base_prob(g.nodes[n]) for n in path])
+    m = severity_multiplier(scenario.severity_percentile, store)
     # Raising the survival prob (1-p) to the power m is like facing m "typical storms" at once.
     # Clip at 0.999 so a device with p=1 can't make the log in _factors blow up.
     p_adj = 1 - (1 - np.clip(base, 0, 0.999)) ** m
@@ -81,7 +103,8 @@ def _confidence(store: DataStore, pr: PathRisk, scenario: StormScenario) -> tupl
     if med < cc["medium_min_events"]:
         missing.append("Little storm history for the equipment that serves you.")
     if scenario.severity_percentile > 95 or scenario.severity_percentile < 5:
-        missing.append("This storm is outside the range of storms in our history.")
+        extreme = "severe" if scenario.severity_percentile > 95 else "mild"
+        missing.append(f"Only a few past storms were this {extreme}, so this estimate rests on very little history.")
         level = {"High": "Medium", "Medium": "Low", "Low": "Low"}[level]
     if pr.level == "circuit":
         missing.append("We matched your area, not your exact address.")
@@ -99,13 +122,17 @@ def _factors(store: DataStore, pr: PathRisk, scenario: StormScenario) -> list[Fa
     hazard = -np.log(1 - pr.p_adj)                 # additive contributions
     total = hazard.sum() or 1.0
     factors: list[Factor] = []
+    named: set[str] = set()
     for i in np.argsort(-hazard)[:2]:              # two largest contributors; friendly names only, never IDs
         n = pr.path[i]
-        fp = g.nodes[n].get("fail_prob", 0)
+        k = g.nodes[n]["kind"]
+        who = another_name(k) if k in named else friendly_name(k)   # don't repeat the same sentence twice
+        named.add(k)
+        # Storm-adjusted chance for THIS scenario, learned from how often this equipment was damaged before.
         factors.append(Factor(
             name=f"history:{g.nodes[n]['kind']}", direction="raises", weight=round(float(hazard[i] / total), 2),
-            plain_language=f"In past storms, {friendly_name(g.nodes[n]['kind'])} was damaged "
-                           f"about {round(fp * 100)}% of the time."))
+            plain_language=f"Based on past storms, the chance that {who} is "
+                           f"damaged in a storm like this one is {_pct_text(float(pr.p_adj[i]))}."))
     # Storm strength: weight grows with distance from a median storm.
     sev = scenario.severity_percentile
     factors.append(Factor(

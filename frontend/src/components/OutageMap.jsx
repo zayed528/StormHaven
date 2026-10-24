@@ -28,8 +28,10 @@ export default function OutageMap({ layers, selectedId, onSelect }) {
         type: "scattermap", mode: "markers", name: band,
         lat: pts.map((p) => p.lat), lon: pts.map((p) => p.lon),
         customdata: pts.map((p) => p.id),                    // click -> premise id
-        text: pts.map((p) => `${band} risk`), hovertemplate: "%{text}<extra></extra>",
-        marker: { size: 9, color: BAND_COLORS[band] },
+        // Each point is one transformer; n = homes it serves (no home-level locations are sent).
+        text: pts.map((p) => `${band} risk${p.n ? ` · ${p.n} home${p.n === 1 ? "" : "s"}` : ""}`),
+        hovertemplate: "%{text}<extra></extra>",
+        marker: { size: 7, color: BAND_COLORS[band] },
       };
     });
     // 3) Selected premise ring
@@ -41,18 +43,26 @@ export default function OutageMap({ layers, selectedId, onSelect }) {
     return [...lines, ...byBand, ...ring];
   }, [layers, selectedId]);
 
-  // Center the map on the average premise location (recomputed when the data changes).
-  const center = useMemo(() => {
+  // Fit the view to the data: center on the middle of the points' bounding box, zoom so it all fits.
+  // (Synthetic demo network ~0.1 degrees wide -> zoom ~11; AEP service area ~0.6 degrees -> zoom ~8.)
+  const view = useMemo(() => {
     const p = layers?.premises ?? [];
-    if (!p.length) return { lat: 40, lon: -83 };
-    return { lat: p.reduce((s, x) => s + x.lat, 0) / p.length, lon: p.reduce((s, x) => s + x.lon, 0) / p.length };
+    if (!p.length) return { center: { lat: 40, lon: -83 }, zoom: 9 };
+    let [minLat, maxLat, minLon, maxLon] = [Infinity, -Infinity, Infinity, -Infinity];
+    for (const x of p) {
+      if (x.lat < minLat) minLat = x.lat; if (x.lat > maxLat) maxLat = x.lat;
+      if (x.lon < minLon) minLon = x.lon; if (x.lon > maxLon) maxLon = x.lon;
+    }
+    const span = Math.max(maxLon - minLon, (maxLat - minLat) * 1.3, 0.005);
+    const zoom = Math.min(13, Math.max(3, Math.log2(360 / span) - 1));
+    return { center: { lat: (minLat + maxLat) / 2, lon: (minLon + maxLon) / 2 }, zoom };
   }, [layers]);
 
   return (
     <Plot
       data={traces}
       layout={{
-        map: { style: "carto-positron", center, zoom: 11 },
+        map: { style: "carto-positron", center: view.center, zoom: view.zoom },
         margin: { l: 0, r: 0, t: 0, b: 0 },
         legend: { x: 0.01, y: 0.99, bgcolor: "rgba(255,255,255,0.85)", title: { text: "Outage risk" } },
         uirevision: "keep",                                   // don't reset zoom on every update

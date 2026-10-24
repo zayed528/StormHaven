@@ -5,13 +5,15 @@ Loads data/processed/* (produced by pipelines/). Network and labor load independ
   - network (nodes/edges/damage_mix/priority) is real if nodes.csv exists, else SYNTHETIC
   - labor (labor_hours/multipliers/access_adders) is AEP if pipelines/04 ran, else placeholders
 So everyone can develop from hour 1, and restarting the API after a pipeline run picks up real data.
+Set STORMHAVEN_DATA=synthetic to force the synthetic network even when real data exists (tests do this).
 
 Processed file contract (pipelines must output exactly this):
   nodes.csv          node_id, kind, circuit_id, lat, lon, fail_prob, n_events_observed       (02 + 03)
                      kind in {substation, breaker, recloser, fuse, transformer, premise}
   edges.csv          parent_id, child_id          (power flows parent -> child)                (02)
   damage_mix.json    {kind: {damage_type: share}}                                              (03)
-  meta.json          {"n_events": N}                                                           (03)
+  meta.json          {"n_events": N, "severity_curve": [[percentile, size_multiplier], ...],
+                      "median_event_records": r, "damage_type_shares": {type: share}, ...}       (03)
   priority_nodes.csv node_id    (devices feeding a critical facility; never exposed)           (06)
   labor_hours.csv    damage_type, hours [, source]   PERSON-hours per unit of damage           (04)
   multipliers.json   {"indirect_labor_multiplier": x}                                          (04)
@@ -20,6 +22,7 @@ Processed file contract (pipelines must output exactly this):
 """
 from __future__ import annotations
 import json
+import os
 import random
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -46,6 +49,10 @@ class DataStore:
     is_synthetic: bool                     # True = synthetic network (shown as a banner in the UI)
     labor_from_aep: bool = False           # True = labor hours came from the AEP workbook
     notes: list[str] = field(default_factory=list)   # human-readable data status, shown by /api/health
+    # Real data only (from meta.json); None on the synthetic network, where the engines fall back to config.
+    severity_curve: list[tuple[float, float]] | None = None   # (percentile, storm size / median storm size)
+    median_event_records: float | None = None                 # damage records in a typical (median) storm
+    damage_type_shares: dict[str, float] | None = None        # share of each damage type across all storms
 
 
 # ---------------------------------------------------------------- labor (pipelines/04)
@@ -73,7 +80,7 @@ def _load_processed() -> DataStore:
     mix = json.loads((DATA_PROCESSED / "damage_mix.json").read_text())
 
     g = nx.DiGraph()
-    for r in nodes.itertuples(index=False):
+    for r in nodes.itertuples(index=False):      # lat/lon may be NaN (breakers, step transformers)
         g.add_node(r.node_id, kind=r.kind, circuit_id=r.circuit_id, lat=r.lat, lon=r.lon,
                    fail_prob=float(r.fail_prob), n_events_observed=int(r.n_events_observed),
                    critical=False)
@@ -88,10 +95,13 @@ def _load_processed() -> DataStore:
 
     _annotate_customers(g)
     meta_path = DATA_PROCESSED / "meta.json"
-    n_events = json.loads(meta_path.read_text())["n_events"] if meta_path.exists() else 10
+    meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
     labor, ilm, adders, labor_aep, labor_note = _load_labor()
-    return DataStore(g, labor, ilm, adders, mix, n_events, False, labor_aep,
-                     notes=["Network: AEP data (data/processed).", labor_note])
+    curve = [tuple(x) for x in meta["severity_curve"]] if meta.get("severity_curve") else None
+    return DataStore(g, labor, ilm, adders, mix, meta.get("n_events", 10), False, labor_aep,
+                     notes=["Network: AEP data (data/processed).", labor_note],
+                     severity_curve=curve, median_event_records=meta.get("median_event_records"),
+                     damage_type_shares=meta.get("damage_type_shares"))
 
 
 # ----------------------------------------------------------- synthetic network
@@ -165,6 +175,6 @@ def _annotate_customers(g: nx.DiGraph) -> None:
 @lru_cache(maxsize=1)
 def get_store() -> DataStore:
     """Singleton: built on first call, reused for every request. Restart the API to pick up new pipeline output."""
-    if (DATA_PROCESSED / "nodes.csv").exists():
+    if os.getenv("STORMHAVEN_DATA", "").lower() != "synthetic" and (DATA_PROCESSED / "nodes.csv").exists():
         return _load_processed()
     return _build_synthetic()

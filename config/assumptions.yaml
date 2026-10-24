@@ -12,14 +12,24 @@ risk:
     - {name: Moderate,  max: 0.50}
     - {name: High,      max: 0.80}
     - {name: Very High, max: 1.01}
-  # How much a storm's severity scales per-equipment failure odds.
-  # multiplier = exp(severity_k * (percentile - 50) / 50). source: assumed
+  # How much a storm's severity scales per-equipment failure odds: p' = 1 - (1-p)^m(s).
+  # With AEP data, m(s) comes from the REAL storm-size curve in data/processed/meta.json
+  # (percentile -> storm size / median storm size; pipelines/03). source: AEP
+  # Without it (synthetic network): m(s) = exp(severity_k * (percentile - 50) / 50). source: assumed
   severity_k: 1.2
+  # Outage probability uses m(s)^severity_damping (AEP curve only). Big storms cluster damage, so the share of
+  # customers out grows slower than the damage count. 0.8 = best Brier/log loss in the leave-one-storm-out
+  # backtest (pipelines/05 prints the grid). source: fit on AEP data (one parameter, in-sample for itself)
+  severity_damping: 0.8
+  # ARCOS has no storm IDs: damage reported on days separated by <= this many days = one storm. source: assumed
+  event_gap_days: 1
   # Default per-equipment failure prob when we have no history. source: assumed
   prior_failure_prob: 0.02
-  confidence:       # source: assumed
-    high_min_events: 8     # events of history touching this path
-    medium_min_events: 3
+  confidence:       # source: assumed, set from the AEP data (see docs/ASSUMPTIONS.md)
+    # Storms (in ARCOS) that damaged anything on the customer's circuit. With 36 recorded storms these
+    # cut-offs give ~16% High / 52% Medium / 32% Low across premises; 8/3 left 52% at Low.
+    high_min_events: 5
+    medium_min_events: 2
 
 restoration:
   n_simulations: 600
@@ -53,6 +63,8 @@ restoration:
     transformer_failed: [[XFMR, 1, replace], [XCO, 1, replace], [EQL, 1, replace], [GND, 1, replace]]
     fuse_blown:         [[XCO, 1, install]]
     recloser_damaged:   [[REC, 1, replace], [EQL, 2, replace], [GND, 1, replace]]
+    fuse_cutout_damaged: [[XCO, 1, replace]]           # ARCOS "Fuse Bank / Damaged Switch"
+    switch_damaged:     [[SWI, 1, replace]]            # ARCOS "Switch / Damaged Switch"
   # Damage types with no CU equivalent in the AEP sheet (person-hours). source: assumed
   non_cu_hours:
     tree_on_line: 3.0
@@ -65,6 +77,8 @@ restoration:
     fuse_blown: 0.5
     tree_on_line: 3.0
     recloser_damaged: 3.5
+    fuse_cutout_damaged: 0.5
+    switch_damaged: 2.5
 
 guidance:
   duration_buckets:        # upper bounds in hours on p90. source: assumed

@@ -55,8 +55,16 @@ def _simulate(store: DataStore, pr: PathRisk, sc: StormScenario, n: int, seed: i
     to_clock_hours = store.indirect_multiplier / CFG["crew_size_persons"]   # person-hours -> crew clock hours
     unknown_hrs = CFG["unknown_damage_type_hours"]
     access = CFG["access_multipliers"][sc.road_access.value]
-    # Total storm-wide work ahead of everyone, in crew-hours; grows with storm severity.
-    backlog = CFG["base_backlog_hours_per_crew"] * CFG["default_crews"] * severity_multiplier(sc.severity_percentile)
+    # Total storm-wide work ahead of everyone, in crew clock-hours; grows with storm severity.
+    m = severity_multiplier(sc.severity_percentile, store, for_risk=False)   # workload: undamped storm size
+    if store.median_event_records and store.damage_type_shares:
+        # Real data: expected damage records in a storm this size x average crew hours per record.
+        avg_person_hrs = sum(share * store.labor_hours.get(t, unknown_hrs)
+                             for t, share in store.damage_type_shares.items())
+        backlog = store.median_event_records * m * avg_person_hrs * to_clock_hours
+    else:
+        # Synthetic network: assumed backlog per crew at a median storm, scaled by severity.
+        backlog = CFG["base_backlog_hours_per_crew"] * CFG["default_crews"] * m
 
     # 1) Which devices fail in each simulated storm: independent Bernoulli draws with the storm-adjusted probs.
     damaged = rng.random((n, k)) < pr.p_adj

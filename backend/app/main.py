@@ -7,6 +7,7 @@ from __future__ import annotations
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 
 load_dotenv()      # read .env BEFORE importing app modules, so Bedrock/SNS settings are visible to them
@@ -21,6 +22,8 @@ from app.service import run_concierge                           # noqa: E402
 app = FastAPI(title="StormHaven API", version="0.1.0")
 # Open CORS so a separately hosted frontend (Amplify) can call the API. Tighten to the real origin at deploy.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Compress responses over 1 KB: the real-data map payload is several MB of numbers and shrinks ~5-10x.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 @app.get("/api/health")

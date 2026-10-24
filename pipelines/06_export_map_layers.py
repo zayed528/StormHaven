@@ -1,10 +1,10 @@
 """
-HOUR 6-9 (Jaid): GIS -> lightweight GeoJSON for the Plotly map.
- - Reproject to EPSG:4326 (Plotly needs lat/lon)
- - Simplify geometry so the browser stays fast
- - Priority locations: map each to the device that serves it -> priority_nodes.csv
-   (used ONLY for restoration priority; coordinates never leave the backend)
-STATUS: circuit + priority-location shapefiles not received yet -> names below are GUESSES (TODO).
+HOUR 6-9 (Jaid): GIS -> lightweight map layers + priority-facility flags.
+  python pipelines/06_export_map_layers.py
+ - circuits.geojson: primary lines merged per circuit, reprojected to EPSG:4326, simplified (~10 m)
+   (secondary lines are skipped: 127k segments add weight but no meaning at map zoom)
+ - priority_nodes.csv: transformers that serve a hospital, fire station, or ambulance service.
+   Used ONLY to raise restoration priority; facility names and coordinates never leave this script.
 """
 import sys
 from pathlib import Path
@@ -23,22 +23,40 @@ def _require(*paths):
         sys.exit(0)
 
 
-CIRCUITS = RAW / "circuits.shp"; C_ID = "CIRCUIT_ID"             # TODO
-PRIORITY = RAW / "priority_locations.shp"                        # TODO
-_require(CIRCUITS, PRIORITY, OUT / "nodes.csv")
+# ---- Names read from recon_report.md ----
+PRIMARY = RAW / "Primary_ExportFeatures.shp"; C_ID = "circuit_id"
+PRIORITY = [RAW / "Hospitals_Medic_Pairwis_Clip.shp", RAW / "Fire_Stations_E_Pairwis_Clip.shp",
+            RAW / "Ambulance_Servi_Pairwis_Clip.shp"]          # CRS: Web Mercator + NAVD88 height (compound)
+SIMPLIFY_DEG = 0.0001                       # ~10 m: invisible at street zoom, much smaller payload
+PRIORITY_MAX_M = 500                        # facility -> nearest transformer within this distance (assumed)
+# ------------------------------------------
+_require(PRIMARY, *PRIORITY, OUT / "nodes.csv")
 
-lines = gpd.read_file(CIRCUITS).to_crs(4326)
-# Simplify: drop vertices within ~10 m of the line. Much smaller payload, no visible change at street zoom.
-lines["geometry"] = lines.geometry.simplify(0.0001, preserve_topology=True)   # ~10 m
-lines[[C_ID, "geometry"]].rename(columns={C_ID: "circuit_id"}).to_file(OUT / "circuits.geojson", driver="GeoJSON")
+# 1) Circuit lines: only circuits that exist in our topology, merged into one geometry per circuit
+nodes = pd.read_csv(OUT / "nodes.csv", dtype={"node_id": str, "circuit_id": str})
+known = set(nodes.circuit_id.dropna())
+lines = gpd.read_file(PRIMARY, columns=[C_ID]).to_crs(4326)
+lines = lines[lines[C_ID].astype(str).isin(known)]
+merged = lines.dissolve(by=C_ID).reset_index()
+merged["geometry"] = merged.geometry.simplify(SIMPLIFY_DEG, preserve_topology=True)
+merged = merged.rename(columns={C_ID: "circuit_id"})[["circuit_id", "geometry"]]
+merged.to_file(OUT / "circuits.geojson", driver="GeoJSON")
+size_mb = (OUT / "circuits.geojson").stat().st_size / 1e6
 
-nodes = pd.read_csv(OUT / "nodes.csv", dtype=str)
-# Facilities are served by local equipment, so match them to the nearest transformer or fuse.
-dev = nodes[nodes.kind.isin(["transformer", "fuse"])].dropna(subset=["lat", "lon"])
-dev = gpd.GeoDataFrame(dev, geometry=gpd.points_from_xy(dev.lon.astype(float), dev.lat.astype(float)), crs=4326)
-prio = gpd.read_file(PRIORITY).to_crs(3857)
-# Metres (EPSG:3857); facilities with no device within 500 m are left unmatched.
-hit = gpd.sjoin_nearest(prio, dev.to_crs(3857)[["node_id", "geometry"]], max_distance=500)
-# Write device IDs ONLY: facility names, types, and coordinates never leave this script.
-hit[["node_id"]].drop_duplicates().to_csv(OUT / "priority_nodes.csv", index=False)
-print(f"circuits={len(lines)}  priority facilities matched to devices={len(hit)}/{len(prio)}")
+# 2) Priority facilities -> the transformer that most likely serves each one
+xf = nodes[(nodes.kind == "transformer") & nodes.lat.notna()]
+xf = gpd.GeoDataFrame(xf[["node_id"]], geometry=gpd.points_from_xy(xf.lon, xf.lat), crs=4326).to_crs(3857)
+hits, total = [], 0
+for shp in PRIORITY:
+    fac = gpd.read_file(shp)[["geometry"]].to_crs(3857)     # drop every attribute (names, addresses)
+    fac = gpd.GeoDataFrame(geometry=gpd.points_from_xy(fac.geometry.x, fac.geometry.y), crs=3857)  # 2D only
+    total += len(fac)
+    j = gpd.sjoin_nearest(fac, xf, max_distance=PRIORITY_MAX_M)
+    j = j[~j.index.duplicated()]
+    hits.append(j[["node_id"]])
+    print(f"  {shp.stem}: {len(j)}/{len(fac)} matched to a transformer within {PRIORITY_MAX_M} m")
+prio = pd.concat(hits).drop_duplicates()
+prio.to_csv(OUT / "priority_nodes.csv", index=False)       # device IDs only
+print(f"circuits={len(merged)} ({size_mb:.1f} MB)  priority facilities matched={sum(len(h) for h in hits)}/{total}"
+      f"  -> {len(prio)} flagged transformers")
+print(f"-> {OUT}/circuits.geojson, priority_nodes.csv")

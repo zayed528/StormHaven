@@ -22,7 +22,7 @@ actions:
   - {text: "Keep the fridge and freezer closed. A closed fridge keeps food cold for about 4 hours; a full freezer for about 48 hours.", phase: during, min_band: Moderate, source: "USDA / FoodSafety.gov", reason: "Protects your food during an outage."}
   - {text: "Store drinking water: about one gallon per person per day.", phase: before, min_band: High, buckets: [day, multi_day, extended], source: "Ready.gov", reason: "Your outage could last a day or more."}
   - {text: "Fill your car's gas tank and get some cash in case card readers and pumps are down.", phase: before, min_band: High, buckets: [day, multi_day, extended], reason: "Longer outages can affect stores and gas stations."}
-  - {text: "Plan where you could go if the outage lasts several days, like a friend's home or a local warming or cooling center.", phase: before, min_band: High, buckets: [multi_day, extended], reason: "Your estimated outage is multiple days."}
+  - {text: "Plan where you could go if the outage lasts several days, like a friend's home or a local warming or cooling center.", phase: before, min_band: High, buckets: [multi_day, extended], reason: "In the worst case, your outage could last more than a day."}
   - {text: "Unplug sensitive electronics to protect them from surges when power returns.", phase: during, min_band: Moderate, reason: "Power can surge when it's restored."}
   - {text: "Throw out refrigerated food that has been above 40°F for more than 2 hours. When in doubt, throw it out.", phase: after, min_band: Moderate, buckets: [day, multi_day, extended], source: "FoodSafety.gov", reason: "Your outage may outlast safe food storage."}
   # ---- declared needs only ----

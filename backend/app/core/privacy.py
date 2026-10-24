@@ -19,12 +19,17 @@ FRIENDLY = {
     "recloser": "an automatic switch on the main line",
     "fuse": "the fuse protecting your street",
     "transformer": "the transformer serving your home",
+    "step_transformer": "a voltage transformer on the line serving your area",
 }
 
 # Patterns for things that must never reach a customer or an SMS:
 _COORD = re.compile(r"-?\d{1,3}\.\d{3,}\s*,\s*-?\d{1,3}\.\d{3,}")
-# Synthetic network IDs. TODO (Jaid): add the real AEP ID formats once recon shows them.
-_INTERNAL_ID = re.compile(r"\b(SUB|BRK|REC|FUS|TX|P|CKT)-\d+\b")
+# Internal node IDs: synthetic (SUB-1, FUS-311, ...) and real-data prefixes from pipelines/02 (XF-, FU-, RC-, ...).
+_INTERNAL_ID = re.compile(r"\b(SUB|BRK|REC|FUS|TX|P|CKT|XF|ST|FU|RC|SC|CB)-\d+\b")
+# Bare long digit runs: AEP premise numbers (9 digits), circuit codes (7), device/location numbers.
+_LONG_NUMBER = re.compile(r"\b\d{7,}\b")
+# AEP device location numbers mix digits and a letter, e.g. 37800343D00129.
+_LOCATION_CODE = re.compile(r"\b\d{5,}[A-Z]\d{3,}\b")
 _PHONE = re.compile(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b")
 _EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.]+\b")
 
@@ -34,8 +39,18 @@ _NOT_TEXT = {"audit_id", "name", "source", "band", "confidence", "phase", "chann
 M = TypeVar("M", bound=BaseModel)
 
 
+# Short noun per kind, for "another fuse further up the line" when a path has two of the same kind.
+SHORT = {"substation": "substation", "breaker": "circuit breaker", "recloser": "automatic switch",
+         "fuse": "fuse", "transformer": "transformer", "step_transformer": "voltage transformer"}
+
+
 def friendly_name(kind: str) -> str:
     return FRIENDLY.get(kind, "equipment upstream of you")
+
+
+def another_name(kind: str) -> str:
+    """Name for the 2nd device of a kind already mentioned, e.g. 'another automatic switch further up the line'."""
+    return f"another {SHORT.get(kind, 'piece of equipment')} further up the line"
 
 
 def scrub_text(text: str) -> str:
@@ -45,6 +60,8 @@ def scrub_text(text: str) -> str:
     text = _INTERNAL_ID.sub("[equipment]", text)
     text = _PHONE.sub("[contact hidden]", text)
     text = _EMAIL.sub("[contact hidden]", text)
+    text = _LOCATION_CODE.sub("[equipment]", text)
+    text = _LONG_NUMBER.sub("[id hidden]", text)    # after phones, so 10-digit phones read as contacts
     return text
 
 

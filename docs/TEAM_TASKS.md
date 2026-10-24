@@ -34,7 +34,7 @@ Anyone may add tests to `backend/tests/` for their own module. `.github/CODEOWNE
 **First 3 tasks**
 1. Read `docs/ASSUMPTIONS.md` and `config/assumptions.yaml`. Ask an AEP mentor: (a) are the CU labor hours per person or per crew? (b) typical line-crew size? (c) are our repair recipes realistic? (Show them `restoration.repair_recipes`.)
 2. Run `make pipelines`, open `data/processed/labor_hours.csv`, and sanity-check clock hours per damage type (hours × indirect multiplier ÷ crew size). Adjust recipes with Jaid if the structure-diagram PDF arrives.
-3. Write the definition of storm severity percentile *s* (percentile of an event's total ARCOS damage count) and the plan for fitting `severity_k`.
+3. Review the risk model now live on real data (ASSUMPTIONS.md "Risk", `pipelines/_rates.py`, `backtest.json`). Decide with the team how severity should be ranked (all 36 storms vs. major storms only) and whether to keep `severity_damping` = 0.8.
 
 | block | tasks |
 |---|---|
@@ -50,10 +50,10 @@ Anyone may add tests to `backend/tests/` for their own module. `.github/CODEOWNE
 
 ## Jaid: data + geospatial
 
-**First 3 tasks**
-1. Get the AEP package into `data/raw/` (never commit it) and run `make recon`. Check every shapefile has .shp/.shx/.dbf/.prj (the report flags any that are missing).
-2. Fill `docs/DATA_NOTES.md` from `recon_report.md`: columns, CRS, ID formats, join keys. Send the ID formats to Nandan for the privacy scrubber.
-3. Fill the TODO blocks in `02`, `03`, `06` with **real** column names (no guesses). Note anything ambiguous as a TODO in DATA_NOTES.
+**First 3 tasks** (✅ done at setup: data loaded, recon run, 02/03/06 written for the real formats, DATA_NOTES filled, ID formats added to the scrubber)
+1. Read `docs/DATA_NOTES.md` and re-run `make pipelines` on your machine. Spot-check 5 premises' upline paths against the GIS on a map.
+2. QA the ARCOS attribution: open `data/processed/damage_attributed.csv` and look at the `line_to_protective_zone` records with the largest `dist_m`. Is the nearest-transformer rule sensible there?
+3. Get mentor answers on the data questions in DATA_NOTES (`Repaired_D`, `Media`, life-support flags) and update DATA_NOTES.
 
 | block | tasks |
 |---|---|

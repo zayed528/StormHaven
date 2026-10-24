@@ -23,14 +23,14 @@ make web          # React on http://localhost:5173 (proxies /api -> :8000). Clic
 make test         # backend tests (synthetic network)
 ```
 
-With AEP data in `data/raw/` (never committed):
+With AEP data (from the organizers' repo `hackohio/aep_challenge_hack26`: unzip the three archives flat into `data/raw/` and copy in the labor workbook and structure PDF; never commit any of it):
 ```bash
 make recon        # inventory -> data/processed/recon_report.md
 make pipelines    # 01..06; steps whose inputs are missing print SKIP and the backend keeps its synthetic fallback
 ```
 Restart `make api` after pipelines run. `/api/health` reports what's loaded: `synthetic_data` (network) and `labor_from_aep` (labor hours).
 
-**Current data status:** only the AEP labor workbook has been received, so the network is synthetic and the labor hours are AEP. See [docs/DATA_NOTES.md](docs/DATA_NOTES.md).
+**Current data status:** the full AEP package is in. With `make pipelines` run, the API serves the real network: 117,599 premises, 110 circuits, 36 recorded storms. Without it, the synthetic network is used, and `make test` always runs on synthetic (`STORMHAVEN_DATA=synthetic`), plus real-data checks when the data is present. See [docs/DATA_NOTES.md](docs/DATA_NOTES.md) and the backtest numbers in [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md).
 
 ## Structure
 
@@ -45,6 +45,7 @@ pipelines/
   04_load_labor.py             AEP labor workbook -> labor hours, multiplier, adders Akshat
   05_train_and_backtest.py     calibration + restoration-range coverage              Akshat
   06_export_map_layers.py      circuits GeoJSON, priority facilities -> device IDs   Jaid
+  _rates.py                    damage-rate estimator shared by 03 and 05             Akshat
 backend/app/
   main.py                      /api/health, /api/concierge, /api/map, /api/chat     Nandan
   schemas.py                   API contract (frozen at hour 1)                       shared

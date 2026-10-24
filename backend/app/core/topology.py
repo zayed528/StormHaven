@@ -4,7 +4,7 @@ import networkx as nx
 from app.core.data_loader import DataStore
 
 # Node kinds that are equipment (everything except "premise"). Order upstream -> downstream.
-DEVICE_KINDS = {"substation", "breaker", "recloser", "fuse", "transformer"}
+DEVICE_KINDS = {"substation", "breaker", "recloser", "fuse", "step_transformer", "transformer"}
 
 
 def upline_path(store: DataStore, node_id: str) -> list[str]:

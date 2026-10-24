@@ -9,6 +9,7 @@
 /backend/app/engines/restoration.py    @AKSHAT_GH @JAID_GH
 /pipelines/04_load_labor.py            @AKSHAT_GH
 /pipelines/05_train_and_backtest.py    @AKSHAT_GH
+/pipelines/_rates.py                   @AKSHAT_GH
 /docs/ASSUMPTIONS.md                   @AKSHAT_GH
 
 # --- Jaid: data + geospatial ---

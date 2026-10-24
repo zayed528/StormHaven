@@ -6,14 +6,15 @@ Each step names the minimum-viable-demo (MVD) step it proves. The judges' rule "
 **Setup before going on stage**
 - `make api` + `make web` on the demo laptop, **and** a deployed URL as backup, **and** the backup video (recorded by hour 22).
 - Browser zoom 110%. Close other tabs. Phone with SNS sandbox number on the table, volume on.
-- Reset the scenario: severity 60, crews 20, roads normal, no damage, no needs, alerts on, demo toggle off.
-- Know the demo premise IDs: one Moderate/High premise (rural circuit) and one Low.
+- Reset the scenario: severity 97 (the default), crews 20, roads normal, no damage, no needs, alerts on, demo toggle off.
+- Know the demo premise IDs (real data): one High dot in the southern circuits and one Low. Write them on a card; don't show premise IDs on slides.
+- Severity on real data is the storm's rank among 36 recorded ARCOS storms. 97 ≈ a serious storm; 99 ≈ the Feb 2025 storm. Below about 90 everything is calm, which is honest but dull, so stay in the 95–99 range on stage.
 
 ---
 
 ### 1. Pick a location (MVD 1) ~20 s
 > "A storm is 36 hours out. Maria wants to know what it means for *her* home."
-- Click a home on the rural circuit (or type its premise ID in "Or enter your premise ID").
+- Click a red or orange dot (each dot = one neighborhood transformer and its homes), or type the premise ID in "Or enter your premise ID".
 - Point out: anonymized IDs only; the map shows risk bands, never hospitals or fire stations.
 
 ### 2. "Will I lose power?" (MVD 2) ~40 s
@@ -23,7 +24,7 @@ Each step names the minimum-viable-demo (MVD) step it proves. The judges' rule "
 
 ### 3. Explore scenarios → restoration range (MVD 3) ~60 s, **judges' interaction**
 - Read the range: "If you lose power, most likely X to Y hours. **A range, not a promise**."
-- Drag **storm strength** to 90 → band and range move.
+- Drag **storm strength** from 97 to 99 ("about as bad as the February 2025 storm") → the map reddens, and the band and range move.
 - Set **road access → Blocked** → range widens; the driver text explains why.
 - Set **Damage reported → Broken pole** → range jumps. "Pole replacement hours come from AEP's labor sheet, plus travel and setup time."
 - Point at the **step timeline**: the main line is fixed first, so ETAs never go backwards. That's step restoration.

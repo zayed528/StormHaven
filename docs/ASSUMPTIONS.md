@@ -10,25 +10,43 @@
 
 ## Risk: "Will I lose power?"
 
-Model (v0): every device *i* on the premise's upline path has a historical per-storm failure probability *pᵢ*, the share of past events with ARCOS damage on that device. A storm at severity percentile *s* scales it: *pᵢ′ = 1 − (1 − pᵢ)^m(s)* with *m(s) = exp(k·(s − 50)/50)*. The premise is out if any device fails: *P(out) = 1 − ∏(1 − pᵢ′)*. The factors shown are each device's share of the total hazard *−log(1 − pᵢ′)*.
+**Model (real AEP data, `pipelines/03` + `engines/risk.py`).**
+1. **Storms.** ARCOS has no storm IDs, so damage reported on days at most `event_gap_days` apart counts as one storm. That gives 36 storms; most are tiny and 3 are large.
+2. **Storm size** m = records in the storm ÷ records in a typical (median) storm. The Feb 2025 storm is about 311× a typical storm.
+3. **Damage attributed to devices** (see DATA_NOTES): the damaged device itself, or for line and pole damage, the protective device (fuse, recloser or breaker) that would open.
+4. **Damage rate per device** in a typical storm, Gamma-Poisson empirical Bayes:
+   *rateᵢ = (recordsᵢ + μₖβₖ) / (Σ storm sizes + βₖ)*, where μₖ (prior mean) and βₖ (prior strength) are estimated per device kind from the data. Devices with little history are pulled toward their kind's average. *pᵢ = 1 − e^(−rateᵢ)*. The shared code is `pipelines/_rates.py`.
+5. **Scenario.** Severity percentile *s* maps to a storm size m(s) by reading the **real storm-size curve** (log-interpolated, held flat beyond the largest storm), then damped: *m_eff = m(s)^severity_damping*.
+6. *pᵢ′ = 1 − (1 − pᵢ)^m_eff*, and *P(out) = 1 − ∏(1 − pᵢ′)* over the premise's upline path. Factors are each device's share of *−log(1 − pᵢ′)*.
+
+On the synthetic network (no `meta.json`), step 5 uses *m(s) = exp(k·(s − 50)/50)* instead.
+
+**Backtest (`pipelines/05`, leave-one-storm-out, storm size known):** Brier 0.0097 against 0.0113 for a constant-rate baseline. Calibration is good from 0–80% (predicted 7% → actual 7%, 37% → 32%, 61% → 59%). Predictions ≥ 80% are overconfident (91% → 48%, a small group). Within-storm ranking is modest (AUC 0.53–0.71 on the 3 large storms). Feb 2025: predicted 18.7% of premises out, actual 22.5%.
 
 | key | value | meaning | source | how we validate |
 |---|---|---|---|---|
-| `risk.bands` | Low < 0.20 ≤ Moderate < 0.50 ≤ High < 0.80 ≤ Very High | probability cut-offs for the customer-facing band | assumed | the bands should split backtest premises into groups with clearly different observed outage rates |
-| `risk.severity_k` | 1.2 | how strongly storm severity scales failure odds. At *s* = 90 the multiplier is ≈ 2.6×; at *s* = 10 it is ≈ 0.38× | assumed | fit *k* on ARCOS: regress per-event damage counts on the event's severity percentile (05) |
-| `risk.prior_failure_prob` | 0.02 | failure probability for a device with no history | assumed | compare with the ARCOS base rate across all devices |
-| `risk.confidence.high_min_events` | 8 | median events of history on the path for **High** confidence | assumed | backtest: calibration error should be lower for High than for Medium |
-| `risk.confidence.medium_min_events` | 3 | same, for **Medium** | assumed | same |
-| (code) out-of-range storm | *s* > 95 or < 5 → confidence drops one level | we have few storms that extreme | assumed | — |
-| (code) circuit-level match | circuit, not premise → confidence drops one level | the answer is for a representative premise on the circuit | assumed | — |
+| `risk.bands` | Low < 0.20 ≤ Moderate < 0.50 ≤ High < 0.80 ≤ Very High | probability cut-offs for the customer-facing band | assumed | backtest: observed rates differ clearly by band; note "Very High" is overconfident |
+| (data) severity curve | `meta.json` from 03 | percentile → storm size, from the 36 real storms | AEP | — |
+| `risk.severity_damping` | 0.8 | outage probability uses m(s)^0.8: big storms cluster damage, so fewer distinct customers go out than damage counts suggest | fit on AEP data (best Brier and log loss of 1.0/0.9/0.8/0.7/0.6 in 05; in-sample for this one parameter) | re-run 05 after any data or model change |
+| `risk.event_gap_days` | 1 | report days at most this far apart = one storm (gaps of 1, 2 and 3 days give 35–36 storms, so the result is not sensitive to this) | assumed | team decision |
+| `risk.severity_k` | 1.2 | synthetic network only: exponential severity curve | assumed | — |
+| `risk.prior_failure_prob` | 0.02 | only if a device has **no** `fail_prob` value at all (never happens with 03 output) | assumed | — |
+| (data) per-kind prior μₖ, βₖ | from 03 (`meta.json` → `kind_priors`) | e.g. reclosers fail ~100× more often per device than transformers (their zone covers more line). Step transformers have no records and borrow the transformer prior | AEP | — |
+| `risk.confidence.high_min_events` | 5 | storms that damaged anything on the customer's circuit, for **High** | assumed, set from data | gives ~16% High / 52% Medium / 32% Low across premises |
+| `risk.confidence.medium_min_events` | 2 | same, for **Medium**. Low = this circuit was damaged in at most 1 recorded storm | assumed, set from data | 8/3 (the old values) put 52% of customers at Low, triggering the human-callback escalation for half the territory |
+| (code) extreme storm | *s* > 95 or < 5 → confidence drops one level, with "Only a few past storms were this severe…" | only ~2 storms above the 95th percentile | assumed | — |
+| (code) circuit-level match | circuit, not premise → confidence drops one level | the answer is for a representative premise | assumed | — |
 
-**Storm severity percentile *s*** is a scenario input, not a live forecast. Once ARCOS arrives, Akshat defines it as the percentile of an event's total damage count among past events, so "90th percentile" means "worse than 90% of storms in the history".
+**Storm severity percentile *s*** is a scenario input, not a live forecast. It is the storm's rank among the 36 recorded ARCOS storms, so the 99th percentile ≈ the Feb 2025 storm. Because most recorded "storms" are tiny, everything below about the 90th percentile looks calm; the UI defaults to 97. Whether to rank only among major storms is a team decision.
+
+**ARCOS attribution parameters** (in `03_build_labels.py`): own-device match within 100 m (fuse, transformer) or 150 m (recloser); line, pole and secondary damage → nearest transformer within 1,000 m (the largest observed distance is about 740 m). Light and capacitor-bank records are dropped as non-interrupting.
 
 ## Restoration: "How long could it take?"
 
 Model: Monte Carlo (`n_simulations` draws) over damage on the premise's upline path, conditioned on the premise losing power.
 For each damaged device: **clock hours = (qty × labor_hours[type] + access_adder) × indirect_multiplier ÷ crew_size × access_multiplier × lognormal noise**, where qty is 1–2.
 **Queue wait** = storm-wide backlog × (1 − the device's priority percentile) ÷ crews × access_multiplier. Priority = customers restored, plus a bonus if the device feeds a critical facility. This is step restoration: main-line repairs go first.
+**Storm-wide backlog** (real data) = expected damage records in a storm this size (median records × undamped m(s)) × average person-hours per record (AEP labor × the ARCOS damage-type mix) × indirect multiplier ÷ crew size. On the synthetic network it is `base_backlog_hours_per_crew` × `default_crews` × m(s).
 **Restore time** = assessment hours + the maximum over damaged devices of (wait + labor). We report P10, P50 and P90, plus drivers: the change in P50 with 50% more crews, with blocked roads, and with a storm 20 percentiles stronger.
 
 | key | value | meaning | source | how we validate |
@@ -41,11 +59,11 @@ For each damaged device: **clock hours = (qty × labor_hours[type] + access_adde
 | (data) indirect labor multiplier | from the AEP workbook, sheet *Indirect Labor Multiplier* | drive + safety discussion + setup time, multiplied onto every labor hour | AEP | — |
 | `restoration.access_multipliers` | normal 1.0 / limited 1.4 / blocked 2.2 | storm-wide access slowdown (detours, tree clearing), applied to labor **and** queue wait | assumed | sensitivity check only; AEP gave no storm-access data |
 | (data) access adders | sheet *Labor only work*. limited → "Access Constraint Adder", blocked → "Remote Location Adder" | person-hours added per job | AEP × assumed (the mapping is ours) | — |
-| `restoration.base_backlog_hours_per_crew` | 10.0 | storm-wide backlog per crew at a median storm, scaled by severity | assumed | fit so median simulated restoration ≈ median ARCOS event duration |
-| `restoration.default_crews` | 20 | crew count the backlog is sized for | assumed | ask AEP for typical storm crew counts per district |
+| `restoration.base_backlog_hours_per_crew` | 10.0 | **synthetic network only**: backlog per crew at a median storm | assumed | — |
+| `restoration.default_crews` | 20 | synthetic backlog sizing; the UI's starting crew count is also 20 | assumed | **ask AEP** for typical storm crew counts; the restoration backtest is blocked until `Repaired_D` is understood |
 | `restoration.critical_facility_priority_bonus` | 5000 | customer-equivalents added to devices feeding hospitals, fire or EMS | assumed | — |
 | `restoration.unknown_damage_type_hours` | 4.0 | person-hours when a damage type has no labor entry | assumed | the share of ARCOS records hitting this fallback should be ≈ 0 after `DAMAGE_NAME_MAP` |
-| `restoration.repair_recipes` | e.g. broken pole = medium pole + crossarm + 3 insulators + 3 pins + grounding + guy + anchor | which compatible units (CUs) a crew replaces for each damage type. `04_load_labor.py` sums the AEP CU hours over each recipe | AEP × assumed | **check against the AEP structure-diagram PDF** and with a mentor |
+| `restoration.repair_recipes` (incl. `fuse_cutout_damaged` = cutout replace, `switch_damaged` = switch replace, added for ARCOS types) | e.g. broken pole = medium pole + crossarm + 3 insulators + 3 pins + grounding + guy + anchor | which compatible units (CUs) a crew replaces for each damage type. `04_load_labor.py` sums the AEP CU hours over each recipe | AEP × assumed | **check against the AEP structure-diagram PDF** and with a mentor |
 | `restoration.non_cu_hours.tree_on_line` | 3.0 | person-hours for tree removal (no CU in the AEP sheet) | assumed | ask a mentor |
 | `restoration.placeholder_labor_hours` | 0.5–6.0 per type | used only before `04_load_labor.py` has run | placeholder | — |
 
@@ -81,7 +99,10 @@ Rules, not generation: risk band × duration bucket × **declared** needs select
 | (code) map | premise coordinates rounded to 4 decimals; critical facilities never sent |
 
 ## Known simplifications (say these out loud in the pitch)
-1. Damage events on different devices are treated as independent within a storm. Real storms cluster spatially, so this likely understates the chance of multiple failures.
+1. Damage on different devices is treated as independent within a storm. Real storms cluster damage spatially; `severity_damping` corrects the average effect, but predictions above 80% remain overconfident.
 2. One parent per node: radial network, with no switching or back-feed. Real crews can sometimes re-route power, which would shorten some outages.
 3. Queue wait uses a single storm-wide backlog, not a real crew dispatch schedule.
 4. Storm severity is one number, not wind, ice or track.
+5. Storm history is thin: 36 recorded storms, only 3 large. The model learns *where* damage happens mostly from one storm (Feb 2025, ~75% of all records).
+6. ARCOS gives damage locations, not customer outage records. "Out" means "damage on your upline path"; partial-phase or momentary outages aren't captured.
+7. Restoration ranges are not yet backtested: ARCOS repair dates look like record-closure dates (see DATA_NOTES).
