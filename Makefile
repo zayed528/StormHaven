@@ -1,0 +1,28 @@
+# Run from the repo root. Override the interpreter with: make api PY=python3
+PY ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+
+.PHONY: setup api test web recon pipelines
+
+setup:            ## one-time: venv + Python deps + frontend deps
+	python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+	cd frontend && npm install
+
+api:              ## FastAPI on :8000 (docs at /docs)
+	cd backend && ../$(PY) -m uvicorn app.main:app --reload --port 8000
+
+test:             ## backend tests (synthetic network if no processed data)
+	cd backend && ../$(PY) -m pytest -q
+
+web:              ## React dev server on :5173, proxies /api -> :8000
+	cd frontend && npm run dev
+
+recon:            ## inventory data/raw -> data/processed/recon_report.md
+	$(PY) pipelines/01_recon.py
+
+pipelines:        ## full data build; each step needs the previous step's outputs
+	$(PY) pipelines/01_recon.py
+	$(PY) pipelines/02_build_topology.py
+	$(PY) pipelines/03_build_labels.py
+	$(PY) pipelines/04_load_labor.py
+	$(PY) pipelines/05_train_and_backtest.py
+	$(PY) pipelines/06_export_map_layers.py

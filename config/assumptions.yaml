@@ -1,0 +1,106 @@
+# =====================================================================
+# StormHaven: every assumption the system makes lives here.
+# This file IS the "transparent assumptions" slide. Change a value -> outputs change.
+# Each value is tagged  source: assumed  (we chose it) or  source: AEP  (read from AEP data).
+# Human-readable explanations: docs/ASSUMPTIONS.md (keep the two in sync).
+# Shared file: announce in team chat before changing it.
+# =====================================================================
+
+risk:
+  bands:            # upper bounds (probability), checked in order. source: assumed
+    - {name: Low,       max: 0.20}
+    - {name: Moderate,  max: 0.50}
+    - {name: High,      max: 0.80}
+    - {name: Very High, max: 1.01}
+  # How much a storm's severity scales per-equipment failure odds.
+  # multiplier = exp(severity_k * (percentile - 50) / 50). source: assumed
+  severity_k: 1.2
+  # Default per-equipment failure prob when we have no history. source: assumed
+  prior_failure_prob: 0.02
+  confidence:       # source: assumed
+    high_min_events: 8     # events of history touching this path
+    medium_min_events: 3
+
+restoration:
+  n_simulations: 600
+  assessment_hours: 2.0          # damage assessment before dispatch. source: assumed
+  labor_noise_sigma: 0.30        # lognormal spread on labor hours. source: assumed
+  # Labor hours from the AEP sheet are PERSON-hours. Clock time for one job =
+  #   person_hours * indirect_labor_multiplier / crew_size_persons
+  crew_size_persons: 3           # people per line crew. source: assumed (TODO confirm with AEP mentors)
+  # Used only when pipelines/04 has not produced data/processed/multipliers.json.
+  # The real value comes from the AEP "Indirect Labor Multiplier" sheet. source: assumed placeholder
+  default_indirect_labor_multiplier: 3.0
+  # Road access scales repair labor AND queue wait (detours, tree clearing). source: assumed
+  # Per-job access adders from the AEP "Labor only work" sheet are added on top (pipelines/04).
+  access_multipliers: {normal: 1.0, limited: 1.4, blocked: 2.2}
+  # Storm-wide backlog of labor hours per crew at 50th percentile severity. source: assumed
+  base_backlog_hours_per_crew: 10.0
+  default_crews: 20
+  critical_facility_priority_bonus: 5000   # customers-equivalent. source: assumed
+  unknown_damage_type_hours: 4.0           # person-hours if a damage type has no labor entry. source: assumed
+
+  # Repair recipe per damage type: which compatible units (CUs) a crew replaces or installs.
+  # pipelines/04 sums the AEP CU hours over each recipe -> data/processed/labor_hours.csv.
+  # The HOURS are AEP data; the RECIPES are our assumption (TODO: check against AEP structure diagrams).
+  # Format: [cu_key, quantity, work]  work = replace (removal + install) | install
+  # cu_key values are produced by pipelines/04 from the AEP sheet (see docs/DATA_NOTES.md).
+  repair_recipes:
+    broken_pole:        [[POL_medium, 1, replace], [ARM, 1, replace], [INS, 3, replace], [PIN, 3, replace],
+                         [GND, 1, replace], [GYF, 1, replace], [ANC, 1, replace]]
+    broken_crossarm:    [[ARM, 1, replace], [INS, 3, replace], [PIN, 3, replace]]
+    wire_down:          [[DEC, 2, replace], [CNC, 3, install], [INS, 1, replace]]
+    transformer_failed: [[XFMR, 1, replace], [XCO, 1, replace], [EQL, 1, replace], [GND, 1, replace]]
+    fuse_blown:         [[XCO, 1, install]]
+    recloser_damaged:   [[REC, 1, replace], [EQL, 2, replace], [GND, 1, replace]]
+  # Damage types with no CU equivalent in the AEP sheet (person-hours). source: assumed
+  non_cu_hours:
+    tree_on_line: 3.0
+  # Person-hours used only when data/processed/labor_hours.csv is missing. source: assumed placeholder
+  placeholder_labor_hours:
+    broken_pole: 6.0
+    broken_crossarm: 1.5
+    wire_down: 1.5
+    transformer_failed: 4.0
+    fuse_blown: 0.5
+    tree_on_line: 3.0
+    recloser_damaged: 3.5
+
+guidance:
+  duration_buckets:        # upper bounds in hours on p90. source: assumed
+    - {name: short,    max: 4}
+    - {name: day,      max: 24}
+    - {name: multi_day, max: 72}
+    - {name: extended, max: 100000}
+
+alerts:                    # all source: assumed (documented challenge rules)
+  eligibility:
+    require_enrollment: true
+    require_valid_channel: true
+    min_risk_band: Moderate          # pre-storm alerts at or above this band
+  timing:
+    pre_storm_hours_before: [36, 8]
+    outage_confirmed_within_minutes: 15
+    estimate_update_threshold_hours: 1.0
+  escalation:
+    medical_need_outage_hours: 4     # declared medical need + p50 above this -> human callback
+    etr_missed_grace_hours: 1
+  sms_max_chars: 320
+
+privacy:
+  # Only these fields may ever be sent to the LLM.
+  llm_field_allowlist:
+    - band
+    - probability
+    - confidence
+    - factors
+    - p10_hours
+    - p50_hours
+    - p90_hours
+    - drivers
+    - steps
+    - declared_needs
+    - eligible
+    - assumptions
+    - missing_data
+    - guidance            # curated library text only

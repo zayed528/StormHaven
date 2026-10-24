@@ -1,0 +1,44 @@
+# Replace the placeholders with real GitHub usernames before pushing.
+# Later rules win, so specific paths come after broad ones.
+# Shared contract files at the bottom need the owner AND an announcement in team chat.
+
+*                                      @NANDAN_GH
+
+# --- Akshat: modeling ---
+/backend/app/engines/risk.py           @AKSHAT_GH
+/backend/app/engines/restoration.py    @AKSHAT_GH @JAID_GH
+/pipelines/04_load_labor.py            @AKSHAT_GH
+/pipelines/05_train_and_backtest.py    @AKSHAT_GH
+/docs/ASSUMPTIONS.md                   @AKSHAT_GH
+
+# --- Jaid: data + geospatial ---
+/pipelines/01_recon.py                 @JAID_GH
+/pipelines/02_build_topology.py        @JAID_GH
+/pipelines/03_build_labels.py          @JAID_GH @AKSHAT_GH
+/pipelines/06_export_map_layers.py     @JAID_GH
+/backend/app/core/data_loader.py       @JAID_GH
+/backend/app/core/topology.py          @JAID_GH
+/backend/app/map_layers.py             @JAID_GH
+/docs/DATA_NOTES.md                    @JAID_GH
+
+# --- Nandan: backend, AWS, AI ---
+/backend/app/main.py                   @NANDAN_GH
+/backend/app/config.py                 @NANDAN_GH
+/backend/app/engines/alerts.py         @NANDAN_GH @ABBY_GH
+/backend/app/core/privacy.py           @NANDAN_GH
+/backend/app/core/audit.py             @NANDAN_GH
+/backend/app/ai/                       @NANDAN_GH
+/backend/app/notify/                   @NANDAN_GH
+/backend/tests/                        @NANDAN_GH
+/docs/API_CONTRACT.md                  @NANDAN_GH
+
+# --- Abby: product, UX, content ---
+/frontend/                             @ABBY_GH
+/backend/app/engines/guidance.py       @ABBY_GH
+/backend/app/content/                  @ABBY_GH
+/docs/DEMO_SCRIPT.md                   @ABBY_GH
+
+# --- Shared contracts: touch only after announcing in team chat ---
+/backend/app/schemas.py                @NANDAN_GH @ABBY_GH @AKSHAT_GH @JAID_GH
+/backend/app/service.py                @NANDAN_GH @AKSHAT_GH
+/config/assumptions.yaml               @AKSHAT_GH @NANDAN_GH

@@ -1,0 +1,13 @@
+# StormHaven alert templates. Owner: Abby.  {placeholders} filled by engines/alerts.py.
+# Keep under the SMS limit (alerts.sms_max_chars). Every message is passed through privacy.scrub_text.
+# LLM may optionally polish, then text is re-checked + scrubbed. TODO (Abby): native-speaker review of ES.
+en:
+  pre_storm: "StormHaven storm alert: A storm is expected in your area. Your outage risk is {band}. If you lose power, restoration could take {range_short} (estimate). Charge devices and review your plan. Reply STOP to opt out."
+  outage_confirmed: "StormHaven: AEP knows your power is out. Current estimate: {range_short}. This is an estimate and may change. Stay away from downed lines and call 911 if you see one."
+  estimate_updated: "StormHaven update: Your restoration estimate changed from {old_range} to {range_short}. Reason: {reason}. We'll keep you posted."
+  restoration_complete: "StormHaven: Power should now be restored at your location. Still out? Reply OUT or report it to AEP online so we can check."
+es:
+  pre_storm: "Alerta de StormHaven: Se espera una tormenta en su zona. Su riesgo de apagón es {band}. Si pierde la electricidad, la restauración podría tardar {range_short} (estimación). Cargue sus dispositivos. Responda STOP para cancelar."
+  outage_confirmed: "StormHaven: AEP sabe que no tiene electricidad. Estimación actual: {range_short}. Puede cambiar. Aléjese de cables caídos y llame al 911 si ve uno."
+  estimate_updated: "StormHaven: Su estimación cambió de {old_range} a {range_short}. Motivo: {reason}. Le mantendremos informado."
+  restoration_complete: "StormHaven: La electricidad debería estar restablecida. ¿Sigue sin luz? Responda OUT o repórtelo a AEP en línea."
