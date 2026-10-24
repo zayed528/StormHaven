@@ -25,3 +25,18 @@
 .console-audit .dot { margin-right: .3rem; vertical-align: middle; }
 .console select { width: 100%; padding: .3rem; margin-top: .25rem; }
 @media (max-width: 900px) { .console-grid { grid-template-columns: 1fr; } }
+
+/* --- Storm restoration plan panel (PlannerPanel.jsx) --- */
+.planner { background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: .9rem; }
+.planner > .console-head { margin-bottom: .5rem; }
+.planner h3 { margin: 0; font-size: 1rem; }
+.planner h4 { margin: .9rem 0 .35rem; font-size: .9rem; }
+.planner-body { display: grid; gap: .5rem; transition: opacity .15s; }
+.planner-body.loading { opacity: .55; }                 /* dim while a new plan is fetching */
+.planner-headline { display: flex; flex-wrap: wrap; gap: 1.5rem; padding: .5rem 0; border-bottom: 1px solid var(--line); }
+.planner-headline > div { display: grid; }
+.planner-headline .big { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.planner-headline span:last-child { font-size: .8rem; color: var(--muted); }
+.planner-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+.planner-crit { color: var(--alert); font-weight: 600; }
+@media (max-width: 900px) { .planner-headline { gap: 1rem; } .planner-headline .big { font-size: 1.25rem; } }

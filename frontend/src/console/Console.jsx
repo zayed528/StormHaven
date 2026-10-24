@@ -6,6 +6,7 @@
 // Data comes from app/console.py (GET /api/console/*). Everything here is a model estimate or a
 // scenario what-if; it is never a confirmed restoration time and shows no premise-level locations.
 import React, { useEffect, useState } from "react";
+import PlannerPanel from "./PlannerPanel.jsx";       // storm restoration plan (GET /api/planner/*)
 import "./console.css";
 
 // Local fetch helper (kept here so we don't import from Abby's src/api/client.js).
@@ -72,6 +73,9 @@ export default function Console() {
       </header>
 
       {error && <p className="console-error" role="alert">Couldn't reach the console API: {error}</p>}
+
+      {/* Storm restoration plan: replay a real storm, size the crews, see the restoration curve. */}
+      <PlannerPanel />
 
       <div className="console-grid">
         {/* Alert queue summary + active escalations */}
