@@ -9,6 +9,29 @@ import Console from "./console/Console.jsx";          // Abby's utility console 
 import { getConcierge, getHealth, getMap, getWeather } from "./api/client.js";
 import { STRINGS, fmtRange } from "./i18n.js";
 
+// Theme: the visitor's saved choice, else their computer's setting. index.html applies the same rule before the
+// first paint, so there is no white flash; this keeps React in sync with it. Storage can be blocked: ignore errors.
+const THEME_KEY = "stormhaven-theme";
+function initialTheme() {
+  try { const saved = localStorage.getItem(THEME_KEY); if (saved === "light" || saved === "dark") return saved; } catch { /* blocked */ }
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+// Theme switch icons (inline SVG, so they look the same on every computer, unlike emoji).
+const SunIcon = () => (
+  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round">
+    <circle cx="12" cy="12" r="4.5" />
+    <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
+  </svg>
+);
+const MoonIcon = () => (
+  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z" />
+  </svg>
+);
+
 export default function App() {
   const [layers, setLayers] = useState(null);
   const [health, setHealth] = useState(null);
@@ -21,6 +44,7 @@ export default function App() {
   const [utilityConfirmed, setUtilityConfirmed] = useState(false);
   const [lang, setLang] = useState("en");          // UI language; also profile.language (localized SMS messages)
   const [view, setView] = useState("customer");    // "customer" | "console"
+  const [theme, setTheme] = useState(initialTheme); // "light" | "dark"
   const [result, setResult] = useState(null);
   const [changes, setChanges] = useState(null);    // what moved vs. the previous answer, for the highlight
   const [error, setError] = useState(null);
@@ -37,6 +61,12 @@ export default function App() {
   // Only declared needs and channel TYPES are sent; no names, phone numbers, or addresses.
   const profile = { declared_needs: needs, alerts_enrolled: enrolled, channels: enrolled ? ["sms"] : [], language: lang };
   const utilityStatus = utilityConfirmed ? { outage_confirmed: true, confirmed_etr: t.demoEtr } : null;
+
+  // Theme: stamp it on <html> (styles.css switches every color on data-theme) and remember the choice.
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem(THEME_KEY, theme); } catch { /* blocked: the choice just lasts this visit */ }
+  }, [theme]);
 
   // Once on load: find out whether we're on synthetic data (shows the banner).
   useEffect(() => { getHealth().then(setHealth).catch(() => {}); }, []);
@@ -102,12 +132,21 @@ export default function App() {
       <header>
         <div className="header-row">
           <h1>StormHaven</h1>
-          {/* Both languages always visible; the current one is filled in (and aria-pressed for screen readers). */}
-          <div className="lang-switch" role="group" aria-label={t.languageAria}>
-            {[["en", "English"], ["es", "Español"]].map(([code, label]) => (
-              <button key={code} type="button" lang={code} aria-pressed={lang === code} onClick={() => setLang(code)}>
-                {lang === code && <span aria-hidden="true">✓ </span>}{label}</button>))}
+          <div className="header-actions">
+            {/* Both options always visible; the current one is filled in (and aria-pressed for screen readers). */}
+            <div className="lang-switch" role="group" aria-label={t.languageAria}>
+              {[["en", "English"], ["es", "Español"]].map(([code, label]) => (
+                <button key={code} type="button" lang={code} aria-pressed={lang === code} onClick={() => setLang(code)}>
+                  {lang === code && <span aria-hidden="true">✓ </span>}{label}</button>))}
+            </div>
           </div>
+        </div>
+        {/* Light/Dark switch: floats in the bottom-left corner (the chat robot has the bottom-right). Icons only on
+            screen; aria-label + aria-pressed tell screen readers which is which and which is on. */}
+        <div className="theme-switch" role="group" aria-label={t.themeAria}>
+          {[["light", <SunIcon />, t.themeLight], ["dark", <MoonIcon />, t.themeDark]].map(([code, icon, label]) => (
+            <button key={code} type="button" aria-pressed={theme === code} aria-label={label} title={label}
+              onClick={() => setTheme(code)}>{icon}</button>))}
         </div>
         <nav className="view-tabs" aria-label={t.viewsAria}>
           <button type="button" aria-pressed={view === "customer"} onClick={() => setView("customer")}>{t.tabCustomer}</button>
@@ -136,7 +175,7 @@ export default function App() {
 
         {/* Ring the dot the backend says represents this location (works for typed premise IDs too). */}
         <div className="map" role="region" aria-label={t.mapAria}>
-          <OutageMap t={t} layers={layers} selectedId={result?.map_point_id ?? premise} onSelect={setPremise} />
+          <OutageMap t={t} dark={theme === "dark"} layers={layers} selectedId={result?.map_point_id ?? premise} onSelect={setPremise} />
         </div>
 
         {error && <p role="alert" className="error">{t.apiError(error)}</p>}

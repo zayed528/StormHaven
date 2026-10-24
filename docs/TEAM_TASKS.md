@@ -82,7 +82,7 @@ Anyone may add tests to `backend/tests/` for their own module. `.github/CODEOWNE
 ## Nandan: backend, AWS, AI
 
 **First 3 tasks**
-1. AWS: request **Bedrock model access** for Claude in your region (copy the exact model or inference-profile ID into `.env`). Create a **Guardrail** (PII filters + denied topics: facility locations, employee contacts). Set up the **SNS SMS sandbox**: verify each teammate's phone, subscribe them to a topic, and set `SNS_TOPIC_ARN`. Add a budget alarm.
+1. AWS: confirm **Bedrock model access** for Amazon Nova Lite in `us-east-2` (the model ID is configured in `.env`). Configure the verified **Guardrail** (PII filters + denied topics: facility locations, employee contacts). Set up the **SNS SMS sandbox**: verify each teammate's phone, subscribe them to a topic, and set `SNS_TOPIC_ARN`. Add a budget alarm.
 2. `cp .env.example .env`, then `make api` + `make test`. Confirm `/api/chat` works offline, then online with Bedrock (validated what-if tool → answer-category decision → deterministic rendering).
 3. Deployment skeleton on the synthetic backend (App Runner or EC2 for the API, Amplify for the frontend) so a URL exists early.
 

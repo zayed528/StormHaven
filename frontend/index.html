@@ -4,7 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="StormHaven: storm outage risk, restoration range, preparation, and alerts." />
+    <meta name="color-scheme" content="light dark" />
     <title>StormHaven</title>
+    <!-- Apply the theme before the first paint (saved choice, else the computer's setting), so dark-mode
+         visitors never see a white flash. App.jsx keeps it in sync after that. -->
+    <script>
+      try {
+        var t = localStorage.getItem("stormhaven-theme");
+        if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = t;
+      } catch (e) { /* storage blocked: styles.css falls back to light */ }
+    </script>
   </head>
   <body><div id="root"></div><script type="module" src="/src/main.jsx"></script></body>
 </html>

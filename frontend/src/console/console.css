@@ -9,7 +9,7 @@
 .console-knobs label { display: grid; gap: .25rem; font-size: .85rem; color: var(--muted); }
 .console-error { color: var(--alert); }
 .console-grid { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 1rem; }
-.console-grid article { background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: .9rem; }
+.console-grid article { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: .9rem; }
 .console-grid h3 { margin: 0 0 .5rem; font-size: 1rem; }
 .console-grid h4 { margin: .8rem 0 .3rem; font-size: .85rem; color: var(--muted); }
 .console-muted { color: var(--muted); font-size: .85rem; }
