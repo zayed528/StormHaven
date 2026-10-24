@@ -33,6 +33,7 @@ import pandas as pd
 from app.config import ASSUMPTIONS, DATA_PROCESSED
 
 RCFG = ASSUMPTIONS["restoration"]
+DATA_ARCHIVES = DATA_PROCESSED.parent / "archives"   # committed AEP zips; unpacked + built by `make data`
 
 
 @dataclass
@@ -175,6 +176,14 @@ def _annotate_customers(g: nx.DiGraph) -> None:
 @lru_cache(maxsize=1)
 def get_store() -> DataStore:
     """Singleton: built on first call, reused for every request. Restart the API to pick up new pipeline output."""
-    if os.getenv("STORMHAVEN_DATA", "").lower() != "synthetic" and (DATA_PROCESSED / "nodes.csv").exists():
+    forced_synthetic = os.getenv("STORMHAVEN_DATA", "").lower() == "synthetic"
+    built = (DATA_PROCESSED / "nodes.csv").exists()
+    if not forced_synthetic and built:
         return _load_processed()
-    return _build_synthetic()
+    store = _build_synthetic()
+    # "Columbus confusion" guard: the AEP archives are committed, but someone forgot `make data`, so the
+    # processed files don't exist yet and we quietly fell back to synthetic. Say so loudly (shown by
+    # /api/health) instead of letting real-looking demo data pass for AEP data.
+    if not forced_synthetic and not built and DATA_ARCHIVES.exists():
+        store.notes.insert(0, "AEP data is available but not built yet — run `make data`, then restart the API.")
+    return store

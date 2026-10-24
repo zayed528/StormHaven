@@ -66,6 +66,27 @@ Columns: `Outage_Num, Incident_W, Event, Region, District, Crew_Area, Substation
 
 Outputs: `nodes.csv` (adds `fail_prob` and `n_events_observed`), `damage_mix.json`, `meta.json` (storm sizes, severity curve, damage shares, per-kind priors), `premise_event_labels.csv` (**positives only**), `damage_attributed.csv`, `durations.csv`. The method is explained in `docs/ASSUMPTIONS.md`.
 
+### QA: attribution distance (`damage_attributed.csv` → `dist_m`)
+
+Reviewed the distance from each damage point to the device it was attached to. **Attribution is sound; no fix needed.**
+
+- All 1,648 records attributed. Overall `dist_m`: median 43 m, p90 160 m, p99 446 m, max 738 m (under the 1,000 m cap, so nothing is stretched past the documented limit).
+- By method: `own_device` median **0 m** (406 recs), `secondary_to_transformer` median 31 m (156), `line_to_protective_zone` median 65 m / max 738 m (1,086 — the only method with a long tail, which is expected since it walks from a line/pole up to the first protective device).
+- Only **15 records (0.9%) exceed 500 m**; **36 (2.2%) exceed 300 m**.
+- The far matches are consistent with real rural line damage, not bad joins: among the >300 m records, **31/36 are from the Feb 2025 storm (E021)**, every >500 m record is `primary` wire or `Pole` (never equipment), and **29/36 had `Access_Iss = Yes`** vs ~32% overall. Remote, hard-to-reach span damage landing far from the nearest mapped device is physically sensible.
+- Interpretation to state in the pitch: a large `line_to_protective_zone` distance means "this fault is somewhere in that device's zone," not "the device is that far from its own damage." Already reflected in `docs/ASSUMPTIONS.md`.
+- Minor: the written `damage_attributed.csv` does not include a `report_day` column (only `event_id`). Add it to the `att[[...]]` selection in 03 if date-level QA is ever wanted.
+
+## Device zone features: `08_features.py` → `device_features.csv`
+
+One row per zone-owning device for the modeling team (v1 features, `pipelines/09_model_v1.py`). A **protective zone** is everything a fuse / recloser / breaker feeds downstream, stopping at the next protective device; transformers get a small local zone (themselves + what hangs directly off them). Reads `nodes.csv`/`edges.csv` (+ `nodes_base.csv` fallback), `Primary_ExportFeatures`, `Pole_Clip`, and `priority_nodes.csv`.
+
+Line segments and poles carry no device ID, so they are assigned to a zone with the **same rule 03 uses for line/pole damage**: nearest transformer within 1,000 m (same circuit for primary lines) → that transformer's first upstream protective device. This keeps zone geography consistent with damage attribution.
+
+Columns: `device_id, kind, circuit_id, lat, lon, n_customers, n_transformers, n_downstream_devices, n_poles, line_km, fail_prob, n_events_observed, critical`.
+
+Current output on real data: **32,492 zones** (25,302 transformer + 6,757 fuse + 323 recloser + 110 breaker). Primary line assigned 3,779/5,121 km (74%); poles assigned 82,070/107,013 (77%) — the unassigned remainder is >1 km from any same-circuit transformer, the same limitation 03 has. 82 critical zones. `fail_prob`/`n_events_observed` are blank if 03 hasn't run; 204 rows (breakers, step transformers) have blank lat/lon, which is expected. **Nandan: add `python pipelines/08_features.py` to the Makefile `pipelines` target.**
+
 ## Open data: weather (`07_weather.py`, `backend/app/weather.py`)
 
 | source | endpoint | used for | access |

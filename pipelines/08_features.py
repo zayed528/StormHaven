@@ -1,5 +1,5 @@
 """
-HOUR (Jaid): per-device ZONE features -> data/processed/device_features.csv
+HOUR (Abby): per-device ZONE features -> data/processed/device_features.csv
   python pipelines/08_features.py
 Needs 02 (edges.csv, nodes_base.csv) and the AEP GIS line + pole layers. Reads nodes.csv if 03 has run
 (for fail_prob / n_events_observed), else falls back to nodes_base.csv.
@@ -30,6 +30,12 @@ OUTPUT CONTRACT (one row per zone-owning device)
   n_downstream_devices protective devices strictly inside the zone (depth of nesting below this one)
   n_poles              poles assigned to the zone (hazard surface: more poles = more to inspect/repair)
   line_km              primary line length assigned to the zone, kilometres
+  line_km_overhead     ... of which overhead (Primary_ExportFeatures.mounting == "Overhead")
+  line_km_underground  ... of which underground (rarely storm-damaged)
+  underground_share    line_km_underground / line_km (blank if no line assigned)
+  wood_pole_share      share of the zone's poles that are wood (material Pine or Wood); blank if no poles
+  median_pole_install_year  median install year of the zone's poles with a known date (blank if none)
+  pole_year_coverage   share of the zone's poles with a known install year (only ~half of all poles have one)
   fail_prob            this device's per-median-storm failure probability (from 03; blank if 03 hasn't run)
   n_events_observed    storms that touched this device's circuit (from 03)
   critical             True if the zone feeds a hospital/fire/EMS transformer (from 06 priority_nodes.csv)
@@ -51,6 +57,8 @@ RAW, OUT = ROOT / "data" / "raw", ROOT / "data" / "processed"
 # ---- Names read from recon_report.md (same files 03 / 06 use) ----
 PRIMARY = RAW / "Primary_ExportFeatures.shp"     # line segments, carry circuit_id
 POLES = RAW / "Pole_Clip.shp"                    # pole points, no circuit_id
+UNDERGROUND = "Underground"                      # Primary_ExportFeatures.mounting value
+WOOD_MATERIALS = {"Pine", "Wood"}                # Pole_Clip.material values counted as wood
 LINE_MAX_DIST_M = 1000                           # same as 03: line/pole -> nearest transformer within this
 PROTECTIVE_KINDS = {"fuse", "recloser", "breaker"}
 METRIC_CRS = 3857                                # metres, so "nearest" and lengths are real distances
@@ -151,10 +159,14 @@ def _xf_points(crs):
 
 xf_pts = _xf_points(METRIC_CRS)
 line_km_by_zone = defaultdict(float)
+ug_km_by_zone = defaultdict(float)
 poles_by_zone = defaultdict(int)
+wood_by_zone = defaultdict(int)
+years_by_zone = defaultdict(list)
 
 # Primary lines: match each segment to the nearest transformer ON THE SAME CIRCUIT, then to its zone.
-lines = gpd.read_file(PRIMARY, columns=["circuit_id"]).to_crs(METRIC_CRS)
+lines = gpd.read_file(PRIMARY, columns=["circuit_id", "mounting"]).to_crs(METRIC_CRS)
+lines["ug"] = lines["mounting"].eq(UNDERGROUND)
 lines["seg_km"] = lines.geometry.length / 1000.0
 lines["rep"] = lines.geometry.representative_point()      # a point guaranteed to lie on the segment
 lines_pt = lines.set_geometry("rep")
@@ -162,23 +174,30 @@ for cid, grp in lines_pt.groupby(lines_pt["circuit_id"].astype(str)):
     cand = xf_pts[xf_pts.circuit_id == cid][["node_id", "geometry"]]
     if cand.empty:
         continue
-    j = gpd.sjoin_nearest(grp[["seg_km", "rep"]].set_geometry("rep"), cand,
+    j = gpd.sjoin_nearest(grp[["seg_km", "ug", "rep"]].set_geometry("rep"), cand,
                           max_distance=LINE_MAX_DIST_M, distance_col="dist_m")
     j = j[~j.index.duplicated()]
-    for xf_id, km in zip(j.node_id, j.seg_km):
+    for xf_id, km, ug in zip(j.node_id, j.seg_km, j.ug):
         z = zone_of.get(protective_zone(xf_id))
         if z is not None:
             line_km_by_zone[z] += float(km)
+            if ug:
+                ug_km_by_zone[z] += float(km)
 
 # Poles: no circuit_id, so match to the nearest transformer anywhere within LINE_MAX_DIST_M, then its zone.
-poles = gpd.read_file(POLES, columns=[])[["geometry"]].to_crs(METRIC_CRS)
-jp = gpd.sjoin_nearest(poles, xf_pts[["node_id", "geometry"]],
+poles = gpd.read_file(POLES, columns=["material", "date_insta"]).to_crs(METRIC_CRS)
+poles["wood"] = poles["material"].isin(WOOD_MATERIALS)
+poles["year"] = pd.to_datetime(poles["date_insta"], errors="coerce").dt.year
+jp = gpd.sjoin_nearest(poles[["wood", "year", "geometry"]], xf_pts[["node_id", "geometry"]],
                        max_distance=LINE_MAX_DIST_M, distance_col="dist_m")
 jp = jp[~jp.index.duplicated()]
-for xf_id in jp.node_id:
+for xf_id, wood, year in zip(jp.node_id, jp.wood, jp.year):
     z = zone_of.get(protective_zone(xf_id))
     if z is not None:
         poles_by_zone[z] += 1
+        wood_by_zone[z] += int(wood)
+        if year == year:                       # not NaN
+            years_by_zone[z].append(int(year))
 
 # ---- Assemble the one-row-per-zone table ----
 ll = nodes.set_index("node_id")[["lat", "lon", "circuit_id"]]
@@ -203,6 +222,15 @@ for owner, st in zone_stats.items():
         "n_downstream_devices": st["downstream_devices"],
         "n_poles": int(poles_by_zone.get(owner, 0)),
         "line_km": round(line_km_by_zone.get(owner, 0.0), 3),
+        "line_km_overhead": round(line_km_by_zone.get(owner, 0.0) - ug_km_by_zone.get(owner, 0.0), 3),
+        "line_km_underground": round(ug_km_by_zone.get(owner, 0.0), 3),
+        "underground_share": (round(ug_km_by_zone.get(owner, 0.0) / line_km_by_zone[owner], 3)
+                              if line_km_by_zone.get(owner, 0.0) > 0 else np.nan),
+        "wood_pole_share": (round(wood_by_zone.get(owner, 0) / poles_by_zone[owner], 3)
+                            if poles_by_zone.get(owner, 0) > 0 else np.nan),
+        "median_pole_install_year": (int(np.median(years_by_zone[owner])) if years_by_zone.get(owner) else np.nan),
+        "pole_year_coverage": (round(len(years_by_zone.get(owner, [])) / poles_by_zone[owner], 3)
+                               if poles_by_zone.get(owner, 0) > 0 else np.nan),
         "fail_prob": round(float(fail_prob[owner]), 6) if owner in fail_prob else np.nan,
         "n_events_observed": int(n_events[owner]) if owner in n_events else np.nan,
         "critical": bool(crit),

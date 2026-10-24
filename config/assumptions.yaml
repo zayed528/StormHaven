@@ -23,6 +23,13 @@ risk:
   severity_damping: 0.8
   # ARCOS has no storm IDs: damage reported on days separated by <= this many days = one storm. source: assumed
   event_gap_days: 1
+  # Which damage-rate model is served (pipelines/09 writes it into nodes.csv fail_prob):
+  #   v0 = each device's own history, pulled toward its device kind's average
+  #   v1 = same, but fuse/recloser/breaker zones are pulled toward a zone-feature average (poles, overhead km,
+  #        underground share, transformers; from pipelines/08)
+  # Leave-one-storm-out (09): v1 log loss 0.0423 vs 0.0430, Brier 0.00963 vs 0.00966, but within-storm AUC on
+  # Feb 2025 0.697 vs 0.711. Not a clear win -> v0. source: backtest decision
+  model: v0
   # Default per-equipment failure prob when we have no history. source: assumed
   prior_failure_prob: 0.02
   confidence:       # source: assumed, set from the AEP data (see docs/ASSUMPTIONS.md)
