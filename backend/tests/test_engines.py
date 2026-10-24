@@ -74,6 +74,15 @@ def test_no_needs_means_no_need_specific_guidance():
     assert not any(a.reason.startswith("You told us") for a in r.guidance.actions)
 
 
+def test_declared_needs_are_included_even_at_low_risk():
+    profile = CustomerProfile(declared_needs=["mobility", "infants"])
+    r = run_concierge(ConciergeRequest(premise_id=CKT3, scenario=StormScenario(severity_percentile=0),
+                                       profile=profile))
+    text = " ".join(a.text for a in r.guidance.actions)
+    assert "check on you" in text
+    assert "formula" in text
+
+
 # Documented rule: eligible = enrolled AND has a channel; all 4 message types are generated.
 def test_alert_eligibility_rule():
     off = run_concierge(ConciergeRequest(premise_id=CKT3))
