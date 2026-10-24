@@ -107,7 +107,9 @@ def _is_outage_question(history: list[dict]) -> bool:
     text = " ".join(c.get("text", "") for c in (last_user or {}).get("content", [])
                     if isinstance(c, dict)).lower()
     terms = ("outage", "power", "electric", "risk", "restor", "crew", "storm", "road", "damage",
-             "prepare", "alert", "utility", "line", "wire", "transformer", "fuse", "recloser")
+             "prepare", "alert", "utility", "line", "wire", "transformer", "fuse", "recloser",
+             "medical", "medication", "mobility", "infant", "baby", "pet", "critical facility",
+             "life support")
     return any(term in text for term in terms)
 
 

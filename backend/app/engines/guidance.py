@@ -52,12 +52,16 @@ def build_guidance(risk: RiskResponse, rest: RestorationResponse, profile: Custo
     # Action items: an item applies only if it passes all three gates (band, duration bucket, declared need).
     actions = []          # (is need-specific, item)
     for a in lib["actions"]:
-        if band_rank < BAND_ORDER[a.get("min_band", "Low")]:           # risk too low for this item
+        is_declared_need = bool(a.get("needs") and set(a["needs"]) & needs)
+        if a.get("needs") and not is_declared_need:                    # need not declared -> never shown
             continue
-        if a.get("buckets") and bucket not in a["buckets"]:            # wrong expected duration
-            continue
-        if a.get("needs") and not (set(a["needs"]) & needs):          # need not declared -> never shown
-            continue
+        # Explicitly selected needs are always relevant, even when the general risk or
+        # duration bucket is low. The customer asked us to consider this need.
+        if not is_declared_need:
+            if band_rank < BAND_ORDER[a.get("min_band", "Low")]:       # risk too low for this item
+                continue
+            if a.get("buckets") and bucket not in a["buckets"]:        # wrong expected duration
+                continue
         actions.append((bool(a.get("needs")), GuidanceItem(text=_pick(a, "text", lang), phase=a["phase"],
                                                             reason=_pick(a, "reason", lang))))
 
