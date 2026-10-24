@@ -1,14 +1,13 @@
-// StormHaven: map-first storm outage concierge. State lives here; components render.   Owner: Abby
+// StormHaven: map-first storm outage concierge. State lives here; components render.   Owner: Nandan (was Abby)
 import React, { useEffect, useRef, useState } from "react";
 import OutageMap from "./components/OutageMap.jsx";
 import ScenarioControls from "./components/ScenarioControls.jsx";
 import ResultsPanel from "./components/ResultsPanel.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
 import WeatherCard from "./components/WeatherCard.jsx";
+import Console from "./console/Console.jsx";          // Abby's utility console (fetches its own data)
 import { getConcierge, getHealth, getMap, getWeather } from "./api/client.js";
-
-// Text the simulated utility feed "confirms" when the demo toggle is on. Never produced by the model.
-const DEMO_ETR = "Crews are assigned to your area. Utility-confirmed restoration time: by 9:00 PM tonight.";
+import { STRINGS, fmtRange } from "./i18n.js";
 
 export default function App() {
   const [layers, setLayers] = useState(null);
@@ -20,80 +19,150 @@ export default function App() {
   const [needs, setNeeds] = useState([]);
   const [enrolled, setEnrolled] = useState(true);
   const [utilityConfirmed, setUtilityConfirmed] = useState(false);
+  const [lang, setLang] = useState("en");          // UI language; also profile.language (localized SMS messages)
+  const [view, setView] = useState("customer");    // "customer" | "console"
   const [result, setResult] = useState(null);
+  const [changes, setChanges] = useState(null);    // what moved vs. the previous answer, for the highlight
   const [error, setError] = useState(null);
+  const t = STRINGS[lang];
   // The last answer shown for THIS location: its range + the scenario behind it. Sent back so the
   // "estimate updated" message can say old -> new and give the real reason. Refs (not state) because
-  // updating them must not trigger another request. Reset when the location changes.
-  const last = useRef({ premise: null, range: null, scenario: null });
+  // updating them must not trigger another request. Reset when the location or language changes.
+  const last = useRef({ premise: null, range: null, scenario: null, result: null });
+  // The previous_* values behind the answer on screen, so "Send as text" can send the same comparison.
+  const shownPrev = useRef({ range: null, scenario: null });
+  // Set when a location is chosen with the keyboard (premise ID form): move focus to the answer when it arrives.
+  const focusResults = useRef(false);
 
   // Only declared needs and channel TYPES are sent; no names, phone numbers, or addresses.
-  const profile = { declared_needs: needs, alerts_enrolled: enrolled, channels: enrolled ? ["sms"] : [], language: "en" };
-  const utilityStatus = utilityConfirmed ? { outage_confirmed: true, confirmed_etr: DEMO_ETR } : null;
+  const profile = { declared_needs: needs, alerts_enrolled: enrolled, channels: enrolled ? ["sms"] : [], language: lang };
+  const utilityStatus = utilityConfirmed ? { outage_confirmed: true, confirmed_etr: t.demoEtr } : null;
 
   // Once on load: find out whether we're on synthetic data (shows the banner).
   useEffect(() => { getHealth().then(setHealth).catch(() => {}); }, []);
   // Weather context (reference storms for the slider label + live forecast). Optional: failures are ignored.
   useEffect(() => { getWeather().then(setWeather).catch(() => {}); }, []);
 
+  // Language switch: tell screen readers / the browser, and forget the last answer. range_short is localized
+  // ("6-24 hours" vs "6-24 horas"), so comparing across languages would fake an "estimate updated" message.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    last.current = { premise: null, range: null, scenario: null, result: null };
+    setChanges(null);
+  }, [lang]);
+
+  // Plotly measures its box while hidden as 0 px; nudge it to re-measure when the customer view comes back.
+  useEffect(() => { if (view === "customer") setTimeout(() => window.dispatchEvent(new Event("resize")), 50); }, [view]);
+
   // Map colors depend only on storm strength, so refetch the map only when severity changes.
   // Debounced: the real-data map is ~1 MB and takes ~1 s, so don't fire on every slider tick.
   useEffect(() => {
-    const t = setTimeout(() => {
+    const tm = setTimeout(() => {
       getMap(scenario.severity_percentile).then((l) => { setLayers(l); setError(null); }).catch((e) => setError(e.message));
     }, 300);
-    return () => clearTimeout(t);
+    return () => clearTimeout(tm);
   }, [scenario.severity_percentile]);
 
   // Re-ask the backend whenever the location or any input changes. All numbers come from the API;
   // the frontend never computes risk or times itself.
   useEffect(() => {
     if (!premise) return;
-    const t = setTimeout(() => {   // debounce slider drags
-      const prev = last.current.premise === premise ? last.current : { range: null, scenario: null };
+    const tm = setTimeout(() => {   // debounce slider drags
+      const prev = last.current.premise === premise ? last.current : { range: null, scenario: null, result: null };
       getConcierge({
         premise_id: premise, scenario, profile,
         previous_range_text: prev.range, previous_scenario: prev.scenario,
         utility_status: utilityStatus,
       }).then((r) => {
+        setChanges(diff(prev.result, r));
         setResult(r); setError(null);
-        last.current = { premise, range: r.restoration.range_short, scenario };
+        shownPrev.current = { range: prev.range, scenario: prev.scenario };
+        last.current = { premise, range: r.restoration.range_short, scenario, result: r };
+        if (focusResults.current) {
+          focusResults.current = false;
+          setTimeout(() => document.getElementById("results")?.focus(), 0);
+        }
       }).catch((e) => setError(e.message));
     }, 200);
-    return () => clearTimeout(t);      // cancel the pending call if inputs change again within 200 ms
-  }, [premise, scenario, needs, enrolled, utilityConfirmed]);   // eslint-disable-line react-hooks/exhaustive-deps
+    return () => clearTimeout(tm);      // cancel the pending call if inputs change again within 200 ms
+  }, [premise, scenario, needs, enrolled, utilityConfirmed, lang]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleNeed = (n) => setNeeds(needs.includes(n) ? needs.filter((x) => x !== n) : [...needs, n]);
 
+  // One short sentence for screen readers when the estimate moves (the panel itself isn't a live region).
+  const summary = changes ? t.changedSummary([
+    changes.band && t.changedBand(t.bands[changes.band], t.bands[result.risk.band]),
+    changes.range && t.changedRange(fmtRange(changes.range, t), fmtRange(result.restoration, t)),
+  ].filter(Boolean).join("; ")) : "";
+
   return (
     <div className="app">
+      {/* First Tab stop: the map can't be used from a keyboard, so jump straight to the premise ID box. */}
+      <a className="skip-link" href="#premise-id">{t.skipToLookup}</a>
       <header>
-        <h1>StormHaven</h1>
-        <p>Select your area on the map to see your storm outlook: outage risk, how long it could last, how to prepare, and alerts.
-          Each dot is one neighborhood transformer and the homes it serves.</p>
-        {health?.synthetic_data && <p className="banner">Demo network: synthetic data, not real AEP locations.</p>}
+        <div className="header-row">
+          <h1>StormHaven</h1>
+          {/* Both languages always visible; the current one is filled in (and aria-pressed for screen readers). */}
+          <div className="lang-switch" role="group" aria-label={t.languageAria}>
+            {[["en", "English"], ["es", "Español"]].map(([code, label]) => (
+              <button key={code} type="button" lang={code} aria-pressed={lang === code} onClick={() => setLang(code)}>
+                {lang === code && <span aria-hidden="true">✓ </span>}{label}</button>))}
+          </div>
+        </div>
+        <nav className="view-tabs" aria-label={t.viewsAria}>
+          <button type="button" aria-pressed={view === "customer"} onClick={() => setView("customer")}>{t.tabCustomer}</button>
+          <button type="button" aria-pressed={view === "console"} onClick={() => setView("console")}>{t.tabConsole}</button>
+        </nav>
+        {view === "customer" && <p>{t.intro}</p>}
+        {health?.synthetic_data && <p className="banner">{t.synthetic}</p>}
       </header>
 
-      <WeatherCard weather={weather} />
+      {/* Customer view stays mounted while hidden, so the map, selection and chat survive a trip to the console. */}
+      <main className="view" hidden={view !== "customer"}>
+        <WeatherCard weather={weather} t={t} />
 
-      <ScenarioControls scenario={scenario} onScenario={setScenario} needs={needs} onToggleNeed={toggleNeed}
-        referenceStorms={weather?.reference_storms ?? []}
-        enrolled={enrolled} onEnrolled={setEnrolled} utilityConfirmed={utilityConfirmed} onUtilityConfirmed={setUtilityConfirmed} />
+        <ScenarioControls t={t} scenario={scenario} onScenario={setScenario} needs={needs} onToggleNeed={toggleNeed}
+          referenceStorms={weather?.reference_storms ?? []}
+          enrolled={enrolled} onEnrolled={setEnrolled} utilityConfirmed={utilityConfirmed} onUtilityConfirmed={setUtilityConfirmed} />
 
-      <form className="locate" onSubmit={(e) => { e.preventDefault(); if (typed.trim()) setPremise(typed.trim()); }}>
-        <label htmlFor="premise-id">Or enter your premise ID</label>
-        <input id="premise-id" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Premise ID from your bill" />
-        <button type="submit">Look up</button>
-      </form>
+        <form className="locate" onSubmit={(e) => {
+          e.preventDefault();
+          if (typed.trim()) { focusResults.current = true; setPremise(typed.trim()); }
+        }}>
+          <label htmlFor="premise-id">{t.locateLabel}</label>
+          <input id="premise-id" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={t.locatePlaceholder} />
+          <button type="submit">{t.lookUp}</button>
+        </form>
 
-      {/* Ring the dot the backend says represents this location (works for typed premise IDs too). */}
-      <div className="map"><OutageMap layers={layers} selectedId={result?.map_point_id ?? premise} onSelect={setPremise} /></div>
+        {/* Ring the dot the backend says represents this location (works for typed premise IDs too). */}
+        <div className="map" role="region" aria-label={t.mapAria}>
+          <OutageMap t={t} layers={layers} selectedId={result?.map_point_id ?? premise} onSelect={setPremise} />
+        </div>
 
-      {error && <p role="alert" className="error">Couldn't reach the outage service: {error}. Check that the API is running (make api).</p>}
+        {error && <p role="alert" className="error">{t.apiError(error)}</p>}
 
-      {result && <ResultsPanel result={result} />}
+        {/* Always mounted so screen readers announce each change once. */}
+        <p className="sr-only" aria-live="polite">{summary}</p>
 
-      <ChatPanel premiseId={premise} scenario={scenario} profile={profile} utilityStatus={utilityStatus} />
+        {result && <ResultsPanel t={t} result={result} changes={changes}
+          notifyRequest={{ premise_id: premise, scenario, profile,
+                           previous_range_text: shownPrev.current.range, previous_scenario: shownPrev.current.scenario }} />}
+
+        <ChatPanel t={t} premiseId={premise} scenario={scenario} profile={profile} utilityStatus={utilityStatus} />
+      </main>
+
+      {view === "console" && <main className="view"><Console /></main>}
     </div>
   );
+}
+
+// What moved between two answers for the same location: the old band and/or the old restoration numbers.
+// null when there's no earlier answer, either one is a fallback, or nothing visible changed.
+function diff(before, now) {
+  if (!before || before.risk.source === "fallback" || now.risk.source === "fallback") return null;
+  const band = before.risk.band !== now.risk.band ? before.risk.band : null;
+  const a = before.restoration, b = now.restoration;
+  // Half an hour is the smallest move the range text can show.
+  const moved = ["p10_hours", "p50_hours", "p90_hours"].some((k) => Math.abs(a[k] - b[k]) >= 0.5);
+  return band || moved ? { band, range: moved ? a : null, stamp: Date.now() } : null;
 }

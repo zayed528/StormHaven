@@ -12,6 +12,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 load_dotenv()      # read .env BEFORE importing app modules, so Bedrock/SNS settings are visible to them
 
 from app.ai.agent import chat                                   # noqa: E402
+from app.console import router as console_router              # noqa: E402
 from app.core.data_loader import get_store                      # noqa: E402
 from app.map_layers import map_layers                           # noqa: E402
 from app.schemas import ChatRequest, ConciergeRequest, ConciergeResponse  # noqa: E402
@@ -23,6 +24,8 @@ app = FastAPI(title="StormHaven API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 # Compress responses over 1 KB: the real-data map payload is several MB of numbers and shrinks ~5-10x.
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+# Utility operator console (read-only, GET /api/console/*): app/console.py.
+app.include_router(console_router)
 
 
 @app.get("/api/health")

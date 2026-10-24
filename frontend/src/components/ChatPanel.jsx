@@ -1,101 +1,154 @@
-// Chat with StormHaven. The backend keeps all calculations deterministic and falls back safely without Bedrock.
+// Chat with StormHaven. Calculations remain deterministic; Bedrock is optional.
 import React, { useEffect, useRef, useState } from "react";
 import { sendChat } from "../api/client.js";
+import { SAFETY_911_EN } from "../translateEs.js";
 import { boundedHistory, chatContextKey, createRequestGate } from "./chatState.js";
 
-const SUGGESTIONS = [
-  "Will I lose power?",
-  "How long might restoration take?",
-  "Why is my outage risk at this level?",
-  "What should I do to prepare?",
-  "What if 30 repair crews are available?",
-];
+const SAFETY_PREFIX = "SAFETY:";
+const ES_EMERGENCY = /\b(cables?|l[ií]neas?)\s+(el[eé]ctric[oa]s?\s+)?(ca[ií]d[oa]s?|en el suelo)|chispa|fuego|incendio|humo|descarga|electrocut|emergencia|\b911\b|no puedo respirar/i;
 
-export default function ChatPanel({ premiseId, scenario, profile, utilityStatus }) {
-  const [history, setHistory] = useState([]);       // Bedrock Converse shape
+function AssistantMsg({ t, text }) {
+  const [safety, rest] = text.startsWith(SAFETY_PREFIX) ? text.split("\n\n", 2) : [null, text];
+  return (
+    <div className="assistant">
+      {safety && <p className="chat-safety" role="alert">
+        <strong>{t.safetyMessage}</strong> {t.tr(safety.slice(SAFETY_PREFIX.length).trim())}</p>}
+      <span className="ai-tag">{t.aiLabel}</span>
+      <p>{t.tr(rest)}</p>
+    </div>
+  );
+}
+
+const RobotIcon = () => (
+  <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true" fill="none" stroke="currentColor"
+    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3.5V6" /><circle cx="12" cy="2.5" r="1.2" fill="currentColor" stroke="none" />
+    <rect x="4" y="6" width="16" height="12" rx="3" />
+    <circle cx="9" cy="11.5" r="1.5" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="11.5" r="1.5" fill="currentColor" stroke="none" />
+    <path d="M9.5 15h5" /><path d="M2 10.5v3M22 10.5v3" />
+  </svg>
+);
+
+export default function ChatPanel({ t, premiseId, scenario, profile, utilityStatus }) {
+  const [history, setHistory] = useState([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [needHome, setNeedHome] = useState(false);
   const [error, setError] = useState(null);
-  const [failedHistory, setFailedHistory] = useState(null);
+  const [failedRequest, setFailedRequest] = useState(null);
   const logRef = useRef(null);
+  const inputRef = useRef(null);
+  const launcherRef = useRef(null);
   const gateRef = useRef(createRequestGate());
   const contextKey = chatContextKey(premiseId, scenario, profile, utilityStatus);
   const currentContextRef = useRef(contextKey);
   currentContextRef.current = contextKey;
 
-  // A conversation belongs to one complete outage context, not only one premise.
   useEffect(() => {
     gateRef.current.invalidate();
-    setHistory([]); setText(""); setBusy(false); setError(null); setFailedHistory(null);
+    setHistory([]);
+    setText("");
+    setBusy(false);
+    setError(null);
+    setFailedRequest(null);
+    setNeedHome(false);
     return () => gateRef.current.invalidate();
   }, [contextKey]);
 
   useEffect(() => {
-    const log = logRef.current;
-    if (log) log.scrollTop = log.scrollHeight;
-  }, [history, busy, error]);
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [history, busy, error, open]);
+  useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
+  useEffect(() => { if (premiseId) setNeedHome(false); }, [premiseId]);
 
-  const submitHistory = async (next) => {
+  const close = () => { setOpen(false); launcherRef.current?.focus(); };
+
+  const submitHistory = async (next, question) => {
     if (!premiseId) return;
     const token = gateRef.current.begin(contextKey);
     if (!token) return;
     const requestedPremise = premiseId;
-    setHistory(next); setBusy(true); setError(null); setFailedHistory(null);
+    setHistory(next);
+    setBusy(true);
+    setError(null);
+    setFailedRequest(null);
     try {
-      const { reply } = await sendChat({
-        history: next, premise_id: requestedPremise, scenario, profile, utility_status: utilityStatus,
+      let { reply } = await sendChat({
+        history: next,
+        premise_id: requestedPremise,
+        scenario,
+        profile,
+        utility_status: utilityStatus,
       }, { signal: token.signal });
+      if (!reply.startsWith(SAFETY_PREFIX) && ES_EMERGENCY.test(question)) {
+        reply = `${SAFETY_PREFIX} ${SAFETY_911_EN}\n\n${reply}`;
+      }
       if (gateRef.current.isCurrent(token, currentContextRef.current)) {
         setHistory([...next, { role: "assistant", content: [{ text: reply }] }]);
       }
     } catch (err) {
       if (err?.name !== "AbortError" && gateRef.current.isCurrent(token, currentContextRef.current)) {
-        setError("I couldn't reach the assistant. Your question was not lost.");
-        setFailedHistory(next);
+        setError(t.chatError);
+        setFailedRequest({ history: next, question });
       }
     } finally {
       if (gateRef.current.finish(token)) setBusy(false);
     }
   };
 
-  const sendText = (value) => {
+  const ask = (value) => {
     const question = value.trim();
-    if (!question || gateRef.current.isInFlight() || !premiseId) return;
+    if (!question || gateRef.current.isInFlight()) return;
+    if (!premiseId) { setNeedHome(true); return; }
     const next = boundedHistory(history, question);
     setText("");
-    submitHistory(next);
+    submitHistory(next, question);
   };
-
-  const send = (e) => {
-    e.preventDefault();
-    sendText(text);
+  const retry = () => {
+    if (failedRequest && !gateRef.current.isInFlight()) {
+      submitHistory(failedRequest.history, failedRequest.question);
+    }
   };
+  const send = (e) => { e.preventDefault(); ask(text); };
 
-  return (
-    <section className="chat" aria-label="Ask StormHaven">
-      <h2>Ask StormHaven</h2>
-      <div className="chat-suggestions" aria-label="Suggested questions">
-        {SUGGESTIONS.map((question) => (
-          <button key={question} type="button" onClick={() => sendText(question)} disabled={!premiseId || busy}>
-            {question}
-          </button>
-        ))}
+  return (<>
+    <button ref={launcherRef} type="button" className="chat-launcher" onClick={() => (open ? close() : setOpen(true))}
+      aria-label={open ? t.chatClose : t.chatOpen} aria-expanded={open}
+      aria-controls="chat-window" title={t.chatTitle}>
+      <RobotIcon />
+    </button>
+    <section id="chat-window" className="chat" aria-label={t.chatTitle} hidden={!open}
+      onKeyDown={(e) => { if (e.key === "Escape") close(); }} aria-busy={busy}>
+      <div className="chat-head">
+        <h2>{t.chatTitle}</h2>
+        <button type="button" className="chat-close" onClick={close} aria-label={t.chatCloseShort}>×</button>
       </div>
-      <div className="chat-log" ref={logRef} aria-live="polite" aria-busy={busy}>
-        {history.map((m, i) => <p key={i} className={m.role}>{m.content[0].text}</p>)}
-        {busy && <p className="assistant chat-loading" role="status">Checking your current outage outlook…</p>}
+      {!premiseId && (
+        <p className={`chat-hint${needHome ? " nudge" : ""}`} role={needHome ? "alert" : undefined}>
+          {needHome ? t.chatHintNudge : ""}{t.chatHint}</p>)}
+      <div className="chips" role="group" aria-label={t.suggestedAria}>
+        {t.suggested.map((q) => (
+          <button key={q} type="button" onClick={() => ask(q)} disabled={busy}>{q}</button>))}
+      </div>
+      <div className="chat-log" ref={logRef} aria-live="polite">
+        {history.map((m, i) => m.role === "assistant"
+          ? <AssistantMsg key={i} t={t} text={m.content[0].text} />
+          : <p key={i} className="user">{m.content[0].text}</p>)}
+        {busy && <p className="assistant typing" role="status">{t.thinking}</p>}
       </div>
       {error && <div className="chat-error" role="alert">
         <span>{error}</span>
-        <button type="button" onClick={() => submitHistory(failedHistory)} disabled={busy || !failedHistory}>Retry</button>
+        <button type="button" onClick={retry} disabled={busy || !failedRequest}>{t.chatRetry}</button>
       </div>}
       <form onSubmit={send}>
-        <input value={text} onChange={(e) => setText(e.target.value)} maxLength={1200} placeholder="e.g. Will I lose power?"
-          aria-label="Your question" disabled={!premiseId} />
-        <button type="submit" disabled={!premiseId || busy || !text.trim()}>{busy ? "Checking…" : "Send"}</button>
+        <input ref={inputRef} value={text} onChange={(e) => setText(e.target.value)} maxLength={1200}
+          placeholder={t.chatPlaceholder} aria-label={t.chatQuestion} />
+        <button type="submit" disabled={busy || !text.trim()}>{busy ? t.sending : t.send}</button>
       </form>
-      {!premiseId && <p className="muted">Select your home on the map first.</p>}
-      <p className="muted">For privacy, don't enter names, addresses, account numbers, or medical details.</p>
+      <p className="muted chat-privacy">{t.chatPrivacy}</p>
     </section>
-  );
+  </>);
 }

@@ -23,8 +23,19 @@ On the synthetic network (no `meta.json`), step 5 uses *m(s) = exp(k·(s − 50)
 
 **Backtest (`pipelines/05`, leave-one-storm-out, storm size known):** Brier 0.0097 against 0.0113 for a constant-rate baseline. Calibration is good from 0–80% (predicted 7% → actual 7%, 37% → 32%, 61% → 59%). Predictions ≥ 80% are overconfident (91% → 48%, a small group). Within-storm ranking is modest (AUC 0.53–0.71 on the 3 large storms). Feb 2025: predicted 18.7% of premises out, actual 22.5%.
 
+**Model v1 tested and not adopted (`pipelines/09_model_v1.py`).** v1 keeps the same structure, but pulls fuse, recloser and breaker zones toward a *feature-based* average instead of their kind's average. It's a Poisson regression on zone exposure from `08_features.py`: poles in the zone (strongest, +0.74 per SD), overhead km (+0.24), transformers (+0.16), underground share (−0.28). Pole age and wood share carried no signal. Same leave-one-storm-out backtest, everything re-fit without each storm:
+
+| | v0 (served) | v1 |
+|---|---|---|
+| Brier / log loss | 0.00966 / 0.0430 | 0.00963 / 0.0423 |
+| Feb 2025: predicted vs actual share out | 18.7% vs 22.5% | 20.8% vs 22.5% |
+| AUC within storm: Feb 2025 / Sep 2024 / Jan 2025 | 0.711 / 0.664 / 0.532 | 0.697 / 0.662 / 0.548 |
+
+v1 is marginally better on average but not at picking *which* areas go dark within a storm, the weakness it was meant to fix. Where damage lands inside a big storm seems to depend on where the ice and wind hit, and a zone's history already reflects its exposure. **Rule: keep the simpler model unless the richer one wins on held-out storms → `risk.model: v0`.** Switching is one config line, and 09 reports both models on every run.
+
 | key | value | meaning | source | how we validate |
 |---|---|---|---|---|
+| `risk.model` | v0 | which damage-rate model `09` writes into `nodes.csv` (v0's values are always kept in `fail_prob_v0`) | backtest decision | re-run 09 after data or feature changes |
 | `risk.bands` | Low < 0.20 ≤ Moderate < 0.50 ≤ High < 0.80 ≤ Very High | probability cut-offs for the customer-facing band | assumed | backtest: observed rates differ clearly by band; note "Very High" is overconfident |
 | (data) severity curve | `meta.json` from 03 | percentile → storm size, from the 36 real storms | AEP | — |
 | `risk.severity_damping` | 0.8 | outage probability uses m(s)^0.8: big storms cluster damage, so fewer distinct customers go out than damage counts suggest | fit on AEP data (best Brier and log loss of 1.0/0.9/0.8/0.7/0.6 in 05; in-sample for this one parameter) | re-run 05 after any data or model change |

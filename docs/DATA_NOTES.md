@@ -66,6 +66,44 @@ Columns: `Outage_Num, Incident_W, Event, Region, District, Crew_Area, Substation
 
 Outputs: `nodes.csv` (adds `fail_prob` and `n_events_observed`), `damage_mix.json`, `meta.json` (storm sizes, severity curve, damage shares, per-kind priors), `premise_event_labels.csv` (**positives only**), `damage_attributed.csv`, `durations.csv`. The method is explained in `docs/ASSUMPTIONS.md`.
 
+### QA: attribution distance (`damage_attributed.csv` → `dist_m`)
+
+Reviewed the distance from each damage point to the device it was attached to. **Attribution is sound; no fix needed.**
+
+- All 1,648 records attributed. Overall `dist_m`: median 43 m, p90 160 m, p99 446 m, max 738 m (under the 1,000 m cap, so nothing is stretched past the documented limit).
+- By method: `own_device` median **0 m** (406 recs), `secondary_to_transformer` median 31 m (156), `line_to_protective_zone` median 65 m / max 738 m (1,086 — the only method with a long tail, which is expected since it walks from a line/pole up to the first protective device).
+- Only **15 records (0.9%) exceed 500 m**; **36 (2.2%) exceed 300 m**.
+- The far matches are consistent with real rural line damage, not bad joins: among the >300 m records, **31/36 are from the Feb 2025 storm (E021)**, every >500 m record is `primary` wire or `Pole` (never equipment), and **29/36 had `Access_Iss = Yes`** vs ~32% overall. Remote, hard-to-reach span damage landing far from the nearest mapped device is physically sensible.
+- Interpretation to state in the pitch: a large `line_to_protective_zone` distance means "this fault is somewhere in that device's zone," not "the device is that far from its own damage." Already reflected in `docs/ASSUMPTIONS.md`.
+- Minor: the written `damage_attributed.csv` does not include a `report_day` column (only `event_id`). Add it to the `att[[...]]` selection in 03 if date-level QA is ever wanted.
+
+## Device zone features: `08_features.py` → `device_features.csv`
+
+One row per zone-owning device for the modeling team (v1 features, `pipelines/09_model_v1.py`). A **protective zone** is everything a fuse / recloser / breaker feeds downstream, stopping at the next protective device; transformers get a small local zone (themselves + what hangs directly off them). Reads `nodes.csv`/`edges.csv` (+ `nodes_base.csv` fallback), `Primary_ExportFeatures`, `Pole_Clip`, and `priority_nodes.csv`.
+
+Line segments and poles carry no device ID, so they are assigned to a zone with the **same rule 03 uses for line/pole damage**: nearest transformer within 1,000 m (same circuit for primary lines) → that transformer's first upstream protective device. This keeps zone geography consistent with damage attribution.
+
+Columns: `device_id, kind, circuit_id, lat, lon, n_customers, n_transformers, n_downstream_devices, n_poles, line_km, fail_prob, n_events_observed, critical`.
+
+Current output on real data: **32,492 zones** (25,302 transformer + 6,757 fuse + 323 recloser + 110 breaker). Primary line assigned 3,779/5,121 km (74%); poles assigned 82,070/107,013 (77%) — the unassigned remainder is >1 km from any same-circuit transformer, the same limitation 03 has. 82 critical zones. `fail_prob`/`n_events_observed` are blank if 03 hasn't run; 204 rows (breakers, step transformers) have blank lat/lon, which is expected. **Nandan: add `python pipelines/08_features.py` to the Makefile `pipelines` target.**
+
+## Utility operator console: `backend/app/console.py` + `frontend/src/console/`
+
+Read-only internal view for AEP staff (not the customer UI). Operators need circuit IDs and equipment kinds, so those appear; but it stays read-only and never shows premise-level locations, contacts, or facility identities (only a count of critical zones).
+
+| endpoint (GET) | returns |
+|---|---|
+| `/api/console/circuits` | every circuit with customers, device count, critical-zone count, storm-history depth (for the picker) |
+| `/api/console/restoration/{circuit_id}?severity=&crews=` | protective devices ranked highest-priority-first (main-line first), with a representative model ETA. 404 on an unknown circuit |
+| `/api/console/alerts?severity=&crews=&road_access=` | alert queue across circuits: risk-band counts, how many circuits meet the pre-storm threshold, and active escalations (uses a representative enrolled+medical profile per circuit — a what-if overview, not real sends) |
+| `/api/console/audit?limit=` | tail of `logs/audit.jsonl`, newest first, every string scrubbed; declared needs reduced to a count so the tail can't profile an individual |
+
+The UI is `frontend/src/console/Console.jsx` (+ its own `console.css`), fully self-contained so it touches no one else's files. Two one-line handoffs:
+- **Nandan (main.py):** `from app.console import router as console_router` then `app.include_router(console_router)`.
+- **Abby (App.jsx):** `import Console from "./console/Console.jsx"` and render it behind one tab button.
+
+Tests: `backend/tests/test_console.py` **skip** until the router is registered, so they never red the build early; once Nandan adds the include line they run automatically (verified passing in-process). Demo note: most ARCOS "storms" are tiny, so bands only spread above ~the 95th severity percentile — set the console severity high (97+) to show High/Very High circuits.
+
 ## Open data: weather (`07_weather.py`, `backend/app/weather.py`)
 
 | source | endpoint | used for | access |
@@ -81,6 +119,15 @@ Outputs: `nodes.csv` (adds `fail_prob` and `n_events_observed`), `damage_mix.jso
 ## Priority facilities → `06_export_map_layers.py`
 
 The 52 facilities are reprojected from the compound CRS and matched to the nearest transformer within 500 m: **41 matched** (4/5 hospitals, 30/37 fire, 7/10 ambulance). Only the transformer IDs are written (`priority_nodes.csv`); names, addresses and coordinates are dropped inside the script. They raise restoration priority and are never shown.
+
+### QA: map-layer privacy review (`/api/map` → `map_layers.py`)
+
+Audited the live `/api/map?severity=97` response against the real network. **Clean on all three requirements; no fix needed.**
+
+- **No facility locations.** A text scan of the full 5.7 MB payload finds none of: hospital, fire, ambulance, medic, critical, address, road_name, owner, customer, premise_nu, phone, email, "life support". Critical facilities raise restoration priority inside the backend only; nothing about them reaches the browser.
+- **One dot per transformer, not per home.** The response returns **25,300 points = exactly the transformers that have coordinates** (25,302 transformers total; 2 have no coordinate). That is far fewer than the 117,599 homes. Each point's `id` is a representative premise behind that transformer (every `id` is a premise node; 0 device IDs leak), and the point sits at the **transformer's** rounded coordinate, not the home's — spot-checked: point lat == transformer lat. So no home-level location is ever emitted.
+- **No internal-only fields.** Premise points carry only `{id, lat, lon, circuit_id, n, p, band}`; circuits carry only `{circuit_id, lat, lon}`. No equipment IDs, no raw `fail_prob`, no operational columns. Coordinates are rounded to **4 decimals (~11 m)**, confirmed on the live payload.
+- `circuit_id` is present (e.g. `0000027`) — this is an anonymized GIS circuit code, not a customer identifier, and the map needs it to color/select circuits. Acceptable for a customer-facing map; flagged here for completeness.
 
 ## Labor workbook: `Install_Labor_HackOHIO.xlsx` → `04_load_labor.py`
 
