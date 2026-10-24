@@ -93,7 +93,7 @@ export const STRINGS = {
     chatHint: "Click a dot on the map or enter your premise ID, then ask me about your storm outlook.",
     chatHintNudge: "First, pick your home: ",
     chatPlaceholder: "e.g. Will I lose power?", chatQuestion: "Your question", send: "Send",
-    thinking: "StormHaven is thinking…", aiLabel: "AI-generated explanation", safetyMessage: "Safety message:",
+    thinking: "StormHaven is thinking…", aiLabel: "StormHaven response", safetyMessage: "Safety message:",
     chatError: "I couldn't reach the assistant. Your question was not lost.", chatRetry: "Retry",
     chatPrivacy: "For privacy, don't enter names, addresses, account numbers, or medical details.",
     // map + weather
@@ -184,7 +184,7 @@ export const STRINGS = {
     chatHint: "Haga clic en un punto del mapa o ingrese su número de servicio y luego pregúnteme sobre su pronóstico.",
     chatHintNudge: "Primero, elija su casa: ",
     chatPlaceholder: "p. ej. ¿Me quedaré sin luz?", chatQuestion: "Su pregunta", send: "Enviar",
-    thinking: "StormHaven está pensando…", aiLabel: "Explicación generada por IA", safetyMessage: "Mensaje de seguridad:",
+    thinking: "StormHaven está pensando…", aiLabel: "Respuesta de StormHaven", safetyMessage: "Mensaje de seguridad:",
     chatError: "No pudimos conectar con el asistente. Su pregunta no se perdió.", chatRetry: "Reintentar",
     chatPrivacy: "Por privacidad, no escriba nombres, direcciones, números de cuenta ni detalles médicos.",
     mapLegend: "Riesgo de apagón", mapHover: (band, n) => `Riesgo ${band.toLowerCase()}${n ? ` · ${n} casa${n === 1 ? "" : "s"}` : ""}`,

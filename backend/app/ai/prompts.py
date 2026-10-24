@@ -11,7 +11,9 @@ Rules you must follow:
 - Your final response must be exactly one JSON object with one key and no Markdown:
   {"answer_type":"overview"}
 - answer_type must be one of: overview, risk, restoration, why, preparation, alerts.
-- Choose the answer type that best matches the latest user question. Do not include any other keys or text."""
+- Choose the answer type that best matches the latest user question. Do not include any other keys or text.
+- Do not emit <thinking>, analysis, explanations, or a tool call alongside the final JSON.
+- Questions about the current outlook, including alert eligibility, never require a tool call."""
 
 # Shown verbatim (not LLM-generated) whenever the latest customer message looks like an emergency.
 SAFETY_911 = ("SAFETY: If a power line is down, something is sparking or on fire, or someone needs urgent "

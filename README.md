@@ -7,7 +7,7 @@
 3. **What should I do to prepare?** Curated, sourced safety and prep actions by risk × duration × **declared** needs.
 4. **Do I qualify for outage alerts?** Documented eligibility rules, timing, escalations, and EN/ES messages.
 
-Four deterministic engines compute every customer-facing fact. Claude on AWS Bedrock (with Guardrails) routes the question to an answer category and may request one validated what-if scenario; the backend renders the answer directly from engine results. Claude-generated outage prose is never displayed. Every answer separates **demo confirmation state**, **model estimates**, and **customer actions**, with a deterministic fallback when Bedrock is unavailable or returns anything unexpected.
+Four deterministic engines compute every customer-facing fact. Amazon Nova Lite on AWS Bedrock (with Guardrails) routes the question to an answer category and may request one validated what-if scenario; the backend renders the answer directly from engine results. Model-generated outage prose is never displayed. Every answer separates **demo confirmation state**, **model estimates**, and **customer actions**, with a deterministic fallback when Bedrock is unavailable or returns anything unexpected.
 
 Challenge brief: [docs/aep_challenge.pdf](docs/aep_challenge.pdf)
 
@@ -17,7 +17,7 @@ Works immediately, without AEP data, on a synthetic network.
 
 ```bash
 make setup        # once: .venv + pip install -r requirements.txt + npm install
-cp .env.example .env   # leave BEDROCK_MODEL_ID blank to run offline
+cp .env.example .env   # verified Nova settings; clear BEDROCK_MODEL_ID for offline-only chat
 make api          # FastAPI on :8000, interactive docs at http://localhost:8000/docs
 make web          # React on http://localhost:5173 (proxies /api -> :8000). Click a dot on the map.
 make test         # backend tests (synthetic network)
