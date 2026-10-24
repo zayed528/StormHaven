@@ -13,6 +13,7 @@ load_dotenv()      # read .env BEFORE importing app modules, so Bedrock/SNS sett
 
 from app.ai.agent import chat                                   # noqa: E402
 from app.console import router as console_router              # noqa: E402
+from app.notify.router import router as notify_router         # noqa: E402  (Abby: POST /api/notify)
 from app.core.data_loader import get_store                      # noqa: E402
 from app.map_layers import map_layers                           # noqa: E402
 from app.planner_routes import router as planner_router        # noqa: E402
@@ -29,6 +30,8 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.include_router(console_router)
 # Storm restoration planner (read-only, GET /api/planner/*): app/planner_routes.py + engines/planner.py.
 app.include_router(planner_router)
+# Proactive-alert sender (POST /api/notify): app/notify/router.py. Dry-runs unless SNS is configured.
+app.include_router(notify_router)
 
 
 @app.get("/api/health")

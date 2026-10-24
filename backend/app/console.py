@@ -151,7 +151,15 @@ def alert_queue(severity: float = 70, crews: int = 20, road_access: AccessLevel 
         alerts = build_alerts(risk, rest, medical, previous_range_text=None)
         on = [e for e in alerts.escalations if e.active]
         for e in on:
-            active_escalations[scrub_text(e.trigger)] += 1
+            # QA fix #6 (Abby): we evaluate every circuit with a HYPOTHETICAL medical profile, so the
+            # medical-need escalation lights up on almost every circuit and tells the operator nothing.
+            # Reword it as a conditional ("would trigger IF a customer here declared a medical need") so
+            # the console doesn't imply a real active alert for someone we never actually identified.
+            # Other escalations (e.g. Low-confidence fallback) are genuine for the typical home, so keep as-is.
+            trigger = e.trigger
+            if "medical" in trigger.lower():
+                trigger = "Would trigger for any customer who has declared a medical need (none assumed)"
+            active_escalations[scrub_text(trigger)] += 1
         band = worst.get(cid, risk.band)
         rows.append({"circuit_id": cid, "band": band,
                      "pre_storm_alert": BAND_RANK.get(band, 1) >= threshold,
