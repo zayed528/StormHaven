@@ -87,6 +87,23 @@ Columns: `device_id, kind, circuit_id, lat, lon, n_customers, n_transformers, n_
 
 Current output on real data: **32,492 zones** (25,302 transformer + 6,757 fuse + 323 recloser + 110 breaker). Primary line assigned 3,779/5,121 km (74%); poles assigned 82,070/107,013 (77%) — the unassigned remainder is >1 km from any same-circuit transformer, the same limitation 03 has. 82 critical zones. `fail_prob`/`n_events_observed` are blank if 03 hasn't run; 204 rows (breakers, step transformers) have blank lat/lon, which is expected. **Nandan: add `python pipelines/08_features.py` to the Makefile `pipelines` target.**
 
+## Utility operator console: `backend/app/console.py` + `frontend/src/console/`
+
+Read-only internal view for AEP staff (not the customer UI). Operators need circuit IDs and equipment kinds, so those appear; but it stays read-only and never shows premise-level locations, contacts, or facility identities (only a count of critical zones).
+
+| endpoint (GET) | returns |
+|---|---|
+| `/api/console/circuits` | every circuit with customers, device count, critical-zone count, storm-history depth (for the picker) |
+| `/api/console/restoration/{circuit_id}?severity=&crews=` | protective devices ranked highest-priority-first (main-line first), with a representative model ETA. 404 on an unknown circuit |
+| `/api/console/alerts?severity=&crews=&road_access=` | alert queue across circuits: risk-band counts, how many circuits meet the pre-storm threshold, and active escalations (uses a representative enrolled+medical profile per circuit — a what-if overview, not real sends) |
+| `/api/console/audit?limit=` | tail of `logs/audit.jsonl`, newest first, every string scrubbed; declared needs reduced to a count so the tail can't profile an individual |
+
+The UI is `frontend/src/console/Console.jsx` (+ its own `console.css`), fully self-contained so it touches no one else's files. Two one-line handoffs:
+- **Nandan (main.py):** `from app.console import router as console_router` then `app.include_router(console_router)`.
+- **Abby (App.jsx):** `import Console from "./console/Console.jsx"` and render it behind one tab button.
+
+Tests: `backend/tests/test_console.py` **skip** until the router is registered, so they never red the build early; once Nandan adds the include line they run automatically (verified passing in-process). Demo note: most ARCOS "storms" are tiny, so bands only spread above ~the 95th severity percentile — set the console severity high (97+) to show High/Very High circuits.
+
 ## Open data: weather (`07_weather.py`, `backend/app/weather.py`)
 
 | source | endpoint | used for | access |
