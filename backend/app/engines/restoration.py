@@ -11,6 +11,7 @@ Priority = customers restored by that repair (+ bonus if it feeds a critical fac
 That's step restoration: main-line fixes go first because they bring back the most people.
 """
 from __future__ import annotations
+import math
 import warnings
 
 import numpy as np
@@ -130,8 +131,29 @@ def _hrs(h: float) -> str:
 
 
 def _fmt(h: float) -> str:
-    """Customer-facing duration: switch to days at 48 h so long outages aren't shown as '73 hours'."""
-    return f"{h / 24:.1f} days" if h >= 48 else f"{h:.0f} hours"
+    """Customer-facing single duration (the 'best guess'): days at 48 h+ so long outages aren't '73 hours'."""
+    if h >= 48:
+        return f"{h / 24:.1f} days"
+    n = round(h)
+    return f"{n} hour" if n == 1 else f"{n} hours"
+
+
+def range_endpoints(lo: float, hi: float) -> tuple[int, str, int, str]:
+    """The ONE rounding rule for a restoration range, shared by the on-screen sentence and every SMS
+    (alerts.short_range): low end rounds down, high end rounds up (the range never looks narrower than it is);
+    hours while the range ends under 48 h, then days. Returns (lo, lo_unit, hi, hi_unit), units 'hours'|'days'."""
+    if hi < 48:
+        return max(0, math.floor(lo)), "hours", max(1, math.ceil(hi)), "hours"
+    if lo < 24:
+        return math.floor(lo), "hours", math.ceil(hi / 24), "days"
+    return math.floor(lo / 24), "days", math.ceil(hi / 24), "days"
+
+
+def _range_words(lo: float, hi: float) -> str:
+    """'6 to 24 hours', '20 hours to 3 days', '2 to 4 days' (English sentence form of range_endpoints)."""
+    a, ua, b, ub = range_endpoints(lo, hi)
+    unit = lambda n, u: f"{n} {u[:-1]}" if n == 1 else f"{n} {u}"      # noqa: E731  (1 hour / 1 day)
+    return f"{a} to {unit(b, ub)}" if ua == ub else f"{unit(a, ua)} to {unit(b, ub)}"
 
 
 def estimate_restoration(store: DataStore, pr: PathRisk, sc: StormScenario,
@@ -201,9 +223,9 @@ def estimate_restoration(store: DataStore, pr: PathRisk, sc: StormScenario,
     return RestorationResponse(
         p10_hours=round(float(p10), 1), p50_hours=round(float(p50), 1), p90_hours=round(float(p90), 1),
         # Before an outage it's conditional ("if you lose power"); once the utility confirms one it isn't.
-        range_text=(f"Our estimate: power back in about {_fmt(p10)} to {_fmt(p90)} (best guess about {_fmt(p50)}). "
+        range_text=(f"Our estimate: power back in about {_range_words(p10, p90)} (best guess about {_fmt(p50)}). "
                     "This is a model estimate, not a confirmed restoration time." if outage_confirmed else
-                    f"If you lose power, most likely {_fmt(p10)} to {_fmt(p90)} (best guess about {_fmt(p50)})."),
+                    f"If you lose power, most likely {_range_words(p10, p90)} (best guess about {_fmt(p50)})."),
         steps=steps, drivers=drivers,
         trust=TrustInfo(
             confidence=risk_confidence,       # restoration inherits the risk engine's confidence (same path data)

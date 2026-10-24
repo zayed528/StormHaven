@@ -16,6 +16,7 @@ shapely~=2.2.0
 pyproj~=3.8.0
 openpyxl~=3.1.5
 scikit-learn~=1.9.1
+matplotlib~=3.11.2       # slide figures (pipelines/10_figures.py)
 # --- tests ---
 pytest~=9.1.1
 httpx~=0.28.1

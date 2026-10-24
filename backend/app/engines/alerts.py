@@ -5,7 +5,6 @@ Documented, deterministic rules (see config/assumptions.yaml -> alerts).
 Messages come from templates; optional LLM polish happens in app/ai, then is re-scrubbed.
 """
 from __future__ import annotations
-import math
 from functools import lru_cache
 import yaml
 
@@ -30,15 +29,12 @@ def _templates() -> dict:
 def short_range(rest: RestorationResponse, language: str = "en") -> str:
     """SMS-length range in the customer's language: "6-24 hours", "20 hours to 3 days", "2-4 days".
     Never a single time. The low end rounds down and the high end rounds up, so the range never shrinks."""
+    from app.engines.restoration import range_endpoints      # same rounding as the on-screen range
     w = _templates()[language]["words"]
     if rest.source == "fallback":
         return w["unknown"]
-    lo, hi = rest.p10_hours, rest.p90_hours
-    if hi < 48:
-        return f"{max(0, math.floor(lo))}-{max(1, math.ceil(hi))} {w['hours']}"
-    if lo < 24:
-        return f"{math.floor(lo)} {w['hours']} {w['to']} {math.ceil(hi / 24)} {w['days']}"
-    return f"{math.floor(lo / 24)}-{math.ceil(hi / 24)} {w['days']}"
+    a, ua, b, ub = range_endpoints(rest.p10_hours, rest.p90_hours)
+    return f"{a}-{b} {w[ub]}" if ua == ub else f"{a} {w[ua]} {w['to']} {b} {w[ub]}"
 
 
 def _change_reason(now: StormScenario, before: StormScenario | None, words: dict) -> str:

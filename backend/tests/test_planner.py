@@ -86,3 +86,15 @@ def test_plan_reveals_no_ids(planner_real):
     import re
     p = planner_real.plan(planner_real.storms()[0]["storm_id"], 20, 3)
     assert not re.search(r"\b(XF|FU|RC|CB|ST|SC)-\d+|\b\d{9}\b", json.dumps(p))
+
+
+# The on-screen range and every SMS use one rounding rule, so they always show the same numbers.
+def test_screen_range_matches_sms_range():
+    import re
+    from app.schemas import CustomerProfile
+    prof = CustomerProfile(alerts_enrolled=True, channels=["sms"])
+    for sc in [StormScenario(), StormScenario(severity_percentile=95, crews_available=3, road_access="blocked")]:
+        r = run_concierge(ConciergeRequest(premise_id=CKT3, scenario=sc, profile=prof))
+        screen = re.findall(r"\d+", r.restoration.range_text.split("(")[0])
+        sms = re.findall(r"\d+", r.restoration.range_short)
+        assert screen == sms and r.restoration.range_short in r.alerts.messages["pre_storm"]

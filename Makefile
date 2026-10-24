@@ -3,7 +3,7 @@ PY ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 # Same interpreter, usable after `cd backend`: paths become absolute, bare commands (python3) stay as-is.
 PYRUN := $(if $(findstring /,$(PY)),$(abspath $(PY)),$(PY))
 
-.PHONY: setup data api test web recon pipelines
+.PHONY: setup data api test web recon pipelines figures
 
 setup:            ## one-time: venv + Python deps + frontend deps
 	python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
@@ -12,6 +12,9 @@ setup:            ## one-time: venv + Python deps + frontend deps
 data:             ## unpack data/archives into data/raw, then build data/processed (~15 s)
 	$(PY) pipelines/00_unpack_data.py
 	$(MAKE) pipelines PY=$(PY)
+
+figures:          ## slide charts from the backtest + storm planner -> docs/figures/*.png
+	$(PY) pipelines/10_figures.py
 
 api:              ## FastAPI on :8000 (docs at /docs)
 	cd backend && $(PYRUN) -m uvicorn app.main:app --reload --port 8000

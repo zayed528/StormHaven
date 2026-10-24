@@ -2,6 +2,18 @@
 
 Hour 0 = kickoff. Times below are **hackathon hours**, not clock time. Write the real start time here: `h0 = ____`.
 
+## CURRENT ASSIGNMENT (supersedes the role tables below, which are from hour 0)
+
+| person | owns | now |
+|---|---|---|
+| **Akshat (+ Claude)** | model + planner: `pipelines/03,04,05,07,09,10,_rates.py`, `engines/risk.py`, `restoration.py`, `planner.py`, `planner_routes.py`, `config/assumptions.yaml`, `docs/ASSUMPTIONS.md`, `tests/test_model.py`, `test_planner.py`, `conftest.py` | ✅ repair work per record (structure drawings), ✅ storm planner + `/api/planner`, ✅ crew size 2–8, ✅ value/effort priority, ✅ slide charts (`make figures` → `docs/figures/`). Next: mentor numbers into config, pitch storyline + Q&A |
+| **Jaid** | AWS + chat: `backend/app/ai/*`, `schemas.py`, `main.py`, deploy | Bedrock live test + Guardrail; planner as a second chat tool; App Runner + Vercel |
+| **Abby** | data + console + notify: `pipelines/02,06,08`, `console.py`, `frontend/src/console/`, `notify/router.py`, `storage.py`, `docs/DATA_NOTES.md`, `API_CONTRACT.md` | **Storm restoration plan panel** in the console on `/api/planner/plan`; S3 startup download |
+| **Nandan** | customer frontend + content: `frontend/src/*` (not `console/`), content YAMLs, `DEMO_SCRIPT.md`, slides | crew-size control (2–8); show the work behind each step; storm-level rename; mobile/PWA; slides around the 4 key questions using `docs/figures/` |
+
+Gatekeepers for shared files: `main.py` / `schemas.py` / `Makefile` → Jaid · `assumptions.yaml` → Akshat · `App.jsx` → Nandan.
+Rule: `git pull` before you commit; never commit `data/raw`, `data/processed`, `.env`, or the phone-photo PDFs in `docs/`.
+
 ## How we stay unblocked
 
 Nobody waits on anybody, because two contracts are fixed at hour 1:
