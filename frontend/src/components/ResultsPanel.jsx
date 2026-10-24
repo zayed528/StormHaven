@@ -10,18 +10,34 @@ const MESSAGE_LABELS = {
   estimate_updated: "Estimate updated", restoration_complete: "Power restored",
 };
 
+// Safety banner look + intro per risk band (colors match the map dots). Unknown = location not matched.
+const BAND_SAFETY = {
+  Low: { cls: "low", title: "Low outage risk",
+    text: "An outage is unlikely, but storms can change quickly. Keep these safety rules in mind." },
+  Moderate: { cls: "moderate", title: "Moderate outage risk",
+    text: "An outage is possible. Get ready now and keep these safety rules in mind." },
+  High: { cls: "high", title: "High outage risk",
+    text: "An outage is likely. Prepare now, and follow these safety rules if your power goes out." },
+  "Very High": { cls: "very-high", title: "Very high outage risk",
+    text: "An outage is very likely and could last a while. Prepare now and follow these safety rules." },
+  Unknown: { cls: "unknown", title: "Safety",
+    text: "We couldn't estimate your risk, but these safety rules apply to every storm." },
+};
+
 export default function ResultsPanel({ result }) {
   const { risk, restoration, guidance, alerts } = result;
   const fallback = risk.source === "fallback";     // location not matched: show the fallback, never numbers
   const trust = [...risk.trust.assumptions, ...restoration.trust.assumptions];
   const missing = [...risk.trust.missing_data, ...restoration.trust.missing_data];
   const activeEsc = alerts.escalations.filter((e) => e.active);
+  const sb = BAND_SAFETY[risk.band] ?? BAND_SAFETY.Unknown;
 
   return (
     <section className="results" aria-live="polite">
       {/* Safety first, visually separate, announced to screen readers via role="alert". */}
       {guidance.safety.length > 0 && (
-        <div className="safety" role="alert"><strong>⚠ Safety</strong>
+        <div className={`safety ${sb.cls}`} role="alert"><strong>⚠ {sb.title}</strong>
+          <p className="safety-intro">{sb.text}</p>
           <ul>{guidance.safety.map((s, i) => <li key={i}>{s.text}</li>)}</ul></div>)}
 
       <div className="cols">
