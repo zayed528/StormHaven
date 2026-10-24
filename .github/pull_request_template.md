@@ -7,7 +7,7 @@
 ## Checklist
 - [ ] `make test` passes locally
 - [ ] `cd frontend && npm run build` passes (if frontend touched)
-- [ ] No AEP data committed (`git status` shows nothing under `data/raw/` or `data/processed/`)
+- [ ] Nothing committed under `data/raw/` or `data/processed/` (AEP data lives only in `data/archives/`)
 - [ ] No secrets committed (no `.env`, no keys, no ARNs or phone numbers in code)
 - [ ] `backend/app/schemas.py` unchanged, **or** the change was announced in team chat and `docs/API_CONTRACT.md` updated
 - [ ] `config/assumptions.yaml` unchanged, **or** the change was announced and `docs/ASSUMPTIONS.md` updated

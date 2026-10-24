@@ -144,6 +144,6 @@ If the real data isn't ready, the checkpoint runs on the synthetic network and J
 - **One branch per person**: `feat/akshat-modeling`, `feat/jaid-data`, `feat/nandan-backend`, `feat/abby-frontend`. Short-lived topic branches off these are fine.
 - **Small PRs into `main`**, using the PR template checklist. One reviewer: the owner of any shared file you touched, otherwise anyone.
 - **Pull `main` every 2 hours** (`git pull --rebase origin main`) and at every checkpoint.
-- **Never commit** `data/raw/`, `data/processed/`, `.env`, keys, ARNs or phone numbers. Run `git status` before every commit.
+- **Never commit** `data/raw/`, `data/processed/`, `.env`, keys, ARNs or phone numbers. Run `git status` before every commit. The AEP data lives in git only as `data/archives/` (get it with `make data`); don't add new data files without telling the team.
 - `main` must always pass `make test` and `npm run build`. If you break it, fixing it is your top priority.
 - After h20 (feature freeze), only bug-fix PRs, and each one gets announced.

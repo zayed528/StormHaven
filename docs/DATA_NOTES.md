@@ -1,11 +1,20 @@
 # StormHaven data notes
 
 **Owner:** Jaid. This covers what each AEP file contains, how the files join, what's missing, and how each pipeline handles it. The source is `make recon` (→ `data/processed/recon_report.md`) plus the profiling done when pipelines 02–06 were written.
-**Rule:** AEP files live in `data/raw/` and outputs in `data/processed/`; both are git-ignored. Describe structure and aggregate counts here. Never put premise IDs, coordinates, addresses or record-level values in committed files.
+**Rule:** the AEP data is committed **only** as compressed archives in `data/archives/` (team decision; the repo is private). `data/raw/` and `data/processed/` are generated and git-ignored. In docs and code, describe structure and aggregate counts; never paste premise IDs, coordinates, addresses or record-level values.
 
 ## Getting the data
 
-The package is in the organizers' repo `hackohio/aep_challenge_hack26` under `data/` (three zips plus the labor workbook) and `docs/structure_drawings.pdf`. Unzip all three into `data/raw/` with the files flat (no subfolders), keeping each shapefile's companion files together, and copy the workbook and PDF there too. Then run `make pipelines`. Never commit any of it.
+`git pull`, then `make data`. That unpacks `data/archives/` into `data/raw/` (and the weather cache into `data/processed/weather_cache/`) and runs pipelines 01–07, in about 15 seconds. Without `make`, run `python pipelines/00_unpack_data.py` and then the pipelines in order.
+
+| archive (`data/archives/`) | contents |
+|---|---|
+| `aep_gis_shapefiles.zip` | 11 shapefile layers (all companion files): transformers, fuses, reclosers, switches, poles, primary + secondary lines, ARCOS damage, hospitals, fire, ambulance. **`Customer_Clip` is excluded**: it holds street addresses and life-support flags, and no code uses it. |
+| `aep_topology.zip` | `matched_upstream.txt` |
+| `Install_Labor_HackOHIO.xlsx`, `structure_drawings.pdf` | as supplied |
+| `weather_cache.zip` | cached Open-Meteo responses, so `07_weather.py` runs instantly and doesn't hit the API |
+
+The original package is in the organizers' repo `hackohio/aep_challenge_hack26` (`data/` + `docs/structure_drawings.pdf`) if you ever need `Customer_Clip` or a fresh copy.
 
 ## Inventory (all received)
 

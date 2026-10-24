@@ -23,6 +23,8 @@
 /backend/app/core/topology.py          @JAID_GH
 /backend/app/map_layers.py             @JAID_GH
 /docs/DATA_NOTES.md                    @JAID_GH
+/data/archives/                        @JAID_GH
+/pipelines/00_unpack_data.py           @JAID_GH
 
 # --- Nandan: backend, AWS, AI ---
 /backend/app/main.py                   @NANDAN_GH

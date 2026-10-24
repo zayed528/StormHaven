@@ -3,7 +3,8 @@ HOUR 1-3 (Jaid): inventory every file AEP gave us. Run FIRST.
   make recon     (or: python pipelines/01_recon.py)
 Writes data/processed/recon_report.md: file inventory, shapefile sidecar check, CRS, row counts,
 columns, sample rows, and columns that look like shared IDs across files (our join keys).
-Read-only on data/raw. The report contains AEP samples: it lives in data/processed (git-ignored).
+Read-only on data/raw (fill it with `make data` first). The report contains AEP samples: it lives in
+data/processed (git-ignored).
 """
 from pathlib import Path
 import pandas as pd

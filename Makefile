@@ -1,11 +1,15 @@
 # Run from the repo root. Override the interpreter with: make api PY=python3
 PY ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
-.PHONY: setup api test web recon pipelines
+.PHONY: setup data api test web recon pipelines
 
 setup:            ## one-time: venv + Python deps + frontend deps
 	python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 	cd frontend && npm install
+
+data:             ## unpack data/archives into data/raw, then build data/processed (~15 s)
+	$(PY) pipelines/00_unpack_data.py
+	$(MAKE) pipelines PY=$(PY)
 
 api:              ## FastAPI on :8000 (docs at /docs)
 	cd backend && ../$(PY) -m uvicorn app.main:app --reload --port 8000

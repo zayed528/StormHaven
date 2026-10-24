@@ -23,11 +23,12 @@ make web          # React on http://localhost:5173 (proxies /api -> :8000). Clic
 make test         # backend tests (synthetic network)
 ```
 
-With AEP data (from the organizers' repo `hackohio/aep_challenge_hack26`: unzip the three archives flat into `data/raw/` and copy in the labor workbook and structure PDF; never commit any of it):
+**Real AEP data:** it's committed compressed in `data/archives/`. One command unpacks it and builds everything (~15 s):
 ```bash
-make recon        # inventory -> data/processed/recon_report.md
-make pipelines    # 01..06; steps whose inputs are missing print SKIP and the backend keeps its synthetic fallback
+make data         # unpack data/archives -> data/raw, then run pipelines 01..07 -> data/processed
 ```
+No `make` (e.g. Windows)? Run `python pipelines/00_unpack_data.py`, then `python pipelines/01_recon.py` … `07_weather.py` in order.
+Other targets: `make recon` (inventory only), `make pipelines` (rebuild after changing a pipeline or `config/assumptions.yaml`).
 Restart `make api` after pipelines run. `/api/health` reports what's loaded: `synthetic_data` (network) and `labor_from_aep` (labor hours).
 
 **Current data status:** the full AEP package is in. With `make pipelines` run, the API serves the real network: 117,599 premises, 110 circuits, 36 recorded storms. Without it, the synthetic network is used, and `make test` always runs on synthetic (`STORMHAVEN_DATA=synthetic`), plus real-data checks when the data is present. See [docs/DATA_NOTES.md](docs/DATA_NOTES.md) and the backtest numbers in [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md).
@@ -86,7 +87,8 @@ docs/                          TEAM_TASKS, API_CONTRACT, ASSUMPTIONS, DATA_NOTES
 Hour-by-hour plan, ownership and git rules: [docs/TEAM_TASKS.md](docs/TEAM_TASKS.md).
 
 ## Hard rules
-- No secrets in code. No AEP data in git.
+- No secrets in code. AEP data goes in git **only** as the archives in `data/archives/` (team decision; the repo is private). Never commit `data/raw/` or `data/processed/` (they're generated).
+- `Customer_Clip` (street addresses, life-support flags) is never committed and never read by any code.
 - The LLM never computes probabilities or times. It calls tools and explains.
 - Every customer-facing string passes through `core/privacy.scrub_text`. The LLM receives only allowlisted derived fields.
 - Restoration is always a range labeled as a model estimate. `confirmed_etr` comes only from the (simulated) utility status.
