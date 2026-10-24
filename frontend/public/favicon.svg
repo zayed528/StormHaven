@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- StormHaven app icon: storm cloud + lightning bolt on the app's navy (#14213D), bolt in the "Moderate" yellow. -->
+  <rect width="512" height="512" rx="112" fill="#14213D"/>
+  <g fill="#FFFFFF">
+    <circle cx="196" cy="236" r="78"/>
+    <circle cx="286" cy="200" r="98"/>
+    <circle cx="360" cy="258" r="64"/>
+    <rect x="128" y="250" width="290" height="72" rx="36"/>
+  </g>
+  <polygon fill="#E3B23C" stroke="#14213D" stroke-width="10" stroke-linejoin="round"
+    points="276,286 214,392 262,392 236,468 324,352 274,352 302,286"/>
+</svg>

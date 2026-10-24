@@ -34,16 +34,23 @@ export default function OutageMap({ t, dark = false, layers, selectedId, onSelec
   const c = dark ? MAP_THEME.dark : MAP_THEME.light;
   const [mode, setMode] = useState("dots");        // "dots" | "heat"
   const heat = mode === "heat";
+  // All circuits' line coordinates joined into one list (null between circuits). Only changes with new map data.
+  const lineCoords = useMemo(() => ({
+    lat: layers ? layers.circuits.flatMap((k) => [...k.lat, null]) : [],
+    lon: layers ? layers.circuits.flatMap((k) => [...k.lon, null]) : [],
+  }), [layers]);
   // Rebuild traces only when data or selection changes (Plotly redraws are expensive).
   const traces = useMemo(() => {
     if (!layers) return [];
-    // 1) Circuit lines: one trace per circuit, segments separated by null
-    const lines = layers.circuits.map((c) => ({
-      type: "scattermap", mode: "lines", lat: c.lat, lon: c.lon,
+    // 1) Circuit lines: ONE trace for every circuit (they share a color; null lifts the pen between pieces).
+    //    110 separate traces meant 110 map layers, and redrawing them froze the page for over a second on each
+    //    storm-level change, long enough to hide the "what changed" highlight.
+    const lines = [{
+      type: "scattermap", mode: "lines", lat: lineCoords.lat, lon: lineCoords.lon,
       // Heatmap view: thin and faint, or the dense line network paints the town dark over the heat.
       line: heat ? { width: 1, color: c.faintLine } : { width: 2, color: c.line },
       hoverinfo: "skip", showlegend: false,
-    }));
+    }];
     // Heatmap view: a glowing surface of homes likely to lose power (drawn under the dots, never clickable).
     const heatLayer = heat ? [{
       type: "densitymap", lat: layers.premises.map((p) => p.lat), lon: layers.premises.map((p) => p.lon),
@@ -77,7 +84,7 @@ export default function OutageMap({ t, dark = false, layers, selectedId, onSelec
       marker: { size: 22, color: "rgba(0,0,0,0)", line: { width: 3, color: c.ring } }, showlegend: false,
     }] : [];
     return [...lines, ...heatLayer, ...halo, ...byBand, ...ring];
-  }, [layers, selectedId, t, heat, c]);
+  }, [layers, lineCoords, selectedId, t, heat, c]);
 
   // Fit the view to the data: center on the middle of the points' bounding box, zoom so it all fits.
   // (Synthetic demo network ~0.1 degrees wide -> zoom ~11; AEP service area ~0.6 degrees -> zoom ~8.)

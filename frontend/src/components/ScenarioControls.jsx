@@ -1,12 +1,9 @@
-// Scenario inputs judges can change + opt-in declared needs + demo-only utility toggle.   Owner: Nandan (was Abby)
+// Storm level (the one scenario input customers set) + opt-in declared needs + demo-only utility toggle.   Owner: Nandan (was Abby)
 // Visible text comes from i18n.js (t); the values sent to the API stay English.
 import React from "react";
 
 // Schema values (DeclaredNeed in backend/app/schemas.py). Labels: t.needs[value].
 const NEEDS = ["medical_device", "refrigerated_medication", "mobility", "infants", "pets", "critical_facility"];
-
-// damage_type values (keys in labor_hours: assumptions.yaml repair_recipes / non_cu_hours). Labels: t.damage[value].
-const DAMAGE = ["", "tree_on_line", "wire_down", "broken_pole", "transformer_failed"];
 
 // Storm slider: 4 levels instead of a raw percentile. pct = the severity_percentile sent to the API
 // (the storm's rank among past storms). Picked from the real network's map:
@@ -33,31 +30,16 @@ export default function ScenarioControls({ t, scenario, onScenario, needs, onTog
   const level = levelFor(scenario.severity_percentile);
   const lv = t.stormLevels[level];
   const setLevel = (e) => onScenario({ ...scenario, severity_percentile: STORM_PCTS[Number(e.target.value)] });
-  // Returns an onChange handler that updates one scenario field (sliders need Number(), selects don't).
-  const set = (k, num = false) => (e) => onScenario({ ...scenario, [k]: num ? Number(e.target.value) : e.target.value });
-  // The UI offers one reported damage item; the API accepts a list.
-  const damage = scenario.extra_damage?.[0]?.damage_type ?? "";
-  const setDamage = (e) => onScenario({
-    ...scenario, extra_damage: e.target.value ? [{ damage_type: e.target.value, quantity: 1 }] : [],
-  });
 
   return (
     <section className="controls" aria-label={t.scenarioAria}>
-      <label>{t.stormLevel}: <strong>{lv.label}</strong>
+      {/* Crews, road access and reported damage are not customer inputs: the API keeps its defaults for them
+          (20 crews, normal roads, no reported damage), and the "what if" lines in the results still explain them. */}
+      <label className="storm">{t.stormLevel}: <strong>{lv.label}</strong>
         <input type="range" min="0" max={STORM_PCTS.length - 1} step="1" value={level} onChange={setLevel}
           aria-valuetext={`${lv.label}. ${lv.note}`} />
         <span className="storm-ticks" aria-hidden="true">{t.stormLevels.map((l) => <span key={l.label}>{l.label}</span>)}</span>
         <span className="muted">{lv.note}{similar ? ` ${similar}` : ""}</span></label>
-      <label>{t.crews}: <strong>{scenario.crews_available}</strong>
-        <input type="range" min="2" max="80" value={scenario.crews_available} onChange={set("crews_available", true)} /></label>
-      <label>{t.roadAccess}
-        <select value={scenario.road_access} onChange={set("road_access")}>
-          {["normal", "limited", "blocked"].map((r) => <option key={r} value={r}>{t.roads[r]}</option>)}
-        </select></label>
-      <label>{t.damageLabel}
-        <select value={damage} onChange={setDamage}>
-          {DAMAGE.map((k) => <option key={k} value={k}>{t.damage[k]}</option>)}
-        </select></label>
 
       <fieldset><legend>{t.needsLegend}</legend>
         {NEEDS.map((k) => (

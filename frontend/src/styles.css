@@ -154,8 +154,10 @@ figure { margin: .5rem 0 0; } figcaption { font-size: .8rem; font-weight: 600; c
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 /* "what changed": the band / range line flashes yellow after an update and shows the old value */
-@keyframes changed-flash { from { background: var(--tint-flash); } to { background: transparent; } }
-.changed { animation: changed-flash 2.5s ease-out; }
+/* Holds solid for ~3 s, then fades: a storm-level change also redraws the map, which can freeze the page for a
+   second, and a fade that started at once would be over before the page could show it. */
+@keyframes changed-flash { 0%, 70% { background: var(--tint-flash); } 100% { background: transparent; } }
+.changed { animation: changed-flash 4s ease-out; }
 .was { display: inline-block; margin-left: .4rem; font-size: .82rem; font-weight: 400; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .changed { animation: none; outline: 2px solid #E3B23C; outline-offset: 2px; } }
 /* "send this alert as a text" under each message */
@@ -219,3 +221,16 @@ input[type="range"] { accent-color: var(--fill); }
 @media (max-width: 600px) { .theme-switch { left: .75rem; bottom: .75rem; } }
 /* Room at the bottom so the last content can scroll clear of the floating theme switch and chat robot. */
 .app { padding-bottom: 7rem; }
+/* storm level gets its own full-width row now that it's the only scenario slider */
+.controls label.storm { grid-column: 1 / -1; max-width: 560px; }
+/* Installed app on a phone (PWA, viewport-fit=cover): keep the floating buttons and the top of the page clear of the
+   notch and the home bar. env() is 0 everywhere else, so desktop and normal browser tabs are unchanged. */
+.chat-launcher { right: calc(1.25rem + env(safe-area-inset-right, 0px)); bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px)); }
+.theme-switch { left: calc(1.25rem + env(safe-area-inset-left, 0px)); bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px)); }
+.chat { bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 600px) {
+  .app { padding-top: calc(.75rem + env(safe-area-inset-top, 0px)); }
+  .chat-launcher { right: calc(.75rem + env(safe-area-inset-right, 0px)); bottom: calc(.75rem + env(safe-area-inset-bottom, 0px)); }
+  .theme-switch { left: calc(.75rem + env(safe-area-inset-left, 0px)); bottom: calc(.75rem + env(safe-area-inset-bottom, 0px)); }
+  .chat { bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px)); height: calc(100vh - 6.5rem - env(safe-area-inset-bottom, 0px)); }
+}
