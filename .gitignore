@@ -25,3 +25,7 @@ _starter/
 .DS_Store
 .vscode/
 .idea/
+
+# Phone photos of the judges' data guide (~25 MB each): keep local, do not commit
+docs/page*.pdf
+docs/Page*.pdf

@@ -76,7 +76,8 @@ What the app does with weather: (1) labels the severity slider with the closest 
 
 Model: Monte Carlo (`n_simulations` draws) over damage on the premise's upline path, conditioned on the premise losing power.
 For each damaged device: **clock hours = (qty × labor_hours[type] + access_adder) × indirect_multiplier ÷ crew_size × access_multiplier × lognormal noise**, where qty is 1–2.
-**Queue wait** = storm-wide backlog × (1 − the device's priority percentile) ÷ crews × access_multiplier. Priority = customers restored, plus a bonus if the device feeds a critical facility. This is step restoration: main-line repairs go first.
+**Queue wait** = storm-wide backlog × (1 − the device's priority percentile) ÷ crews × access_multiplier. **Priority = value ÷ effort** (AEP data guide): (customers restored + a bonus if the device feeds a critical facility) ÷ expected repair hours for that kind of device, from its historical damage mix. This is step restoration: high-value, quick main-line repairs go first.
+**Crew size** is a stated scenario input, 2–8 people (`scenario.crew_size`, default `crew_size_persons`), as the guide asks. Clock hours = person-hours ÷ crew size.
 **Storm-wide backlog** (real data) = expected damage records in a storm this size (median records × undamped m(s)) × average person-hours per record (AEP labor × the ARCOS damage-type mix) × indirect multiplier ÷ crew size. On the synthetic network it is `base_backlog_hours_per_crew` × `default_crews` × m(s).
 **Restore time** = assessment hours + the maximum over damaged devices of (wait + labor). We report P10, P50 and P90, plus drivers: the change in P50 with 50% more crews, with blocked roads, and with a storm 20 percentiles stronger. Before an outage the range is phrased "If you lose power…"; once the (simulated) utility feed confirms an outage it becomes "Our estimate: power back in…" and stays labeled as a model estimate.
 
@@ -85,7 +86,7 @@ For each damaged device: **clock hours = (qty × labor_hours[type] + access_adde
 | `restoration.n_simulations` | 600 | Monte Carlo draws (drivers use 300 with the same seed) | assumed | P50 should be stable to ±0.5 h across seeds |
 | `restoration.assessment_hours` | 2.0 | damage assessment before any crew is dispatched | assumed | ARCOS report-to-first-repair gap, if timestamps allow |
 | `restoration.labor_noise_sigma` | 0.30 | lognormal spread on each repair's labor | assumed | P10–P90 coverage of ARCOS repair durations (05) |
-| `restoration.crew_size_persons` | 3 | people per line crew. Converts AEP **person**-hours to clock hours | assumed | **ask an AEP mentor** whether the CU hours are per person or per crew |
+| `restoration.crew_size_persons` | 3 | **default** people per crew; the UI/API can set 2–8 (AEP data guide: "a reasonable crew may contain 2–8 people") | assumed, stated | crew sensitivity in the planner |
 | `restoration.default_indirect_labor_multiplier` | 3.0 | used only if `multipliers.json` is missing | placeholder | replaced by the AEP sheet value once 04 runs |
 | (data) indirect labor multiplier | from the AEP workbook, sheet *Indirect Labor Multiplier* | drive + safety discussion + setup time, multiplied onto every labor hour | AEP | — |
 | `restoration.access_multipliers` | normal 1.0 / limited 1.4 / blocked 2.2 | storm-wide access slowdown (detours, tree clearing), applied to labor **and** queue wait | assumed | sensitivity check only; AEP gave no storm-access data |
@@ -94,9 +95,43 @@ For each damaged device: **clock hours = (qty × labor_hours[type] + access_adde
 | `restoration.default_crews` | 20 | synthetic backlog sizing; the UI's starting crew count is also 20 | assumed | **ask AEP** for typical storm crew counts; the restoration backtest is blocked until `Repaired_D` is understood |
 | `restoration.critical_facility_priority_bonus` | 5000 | customer-equivalents added to devices feeding hospitals, fire or EMS | assumed | — |
 | `restoration.unknown_damage_type_hours` | 4.0 | person-hours when a damage type has no labor entry | assumed | the share of ARCOS records hitting this fallback should be ≈ 0 after `DAMAGE_NAME_MAP` |
-| `restoration.repair_recipes` (incl. `fuse_cutout_damaged` = cutout replace, `switch_damaged` = switch replace, added for ARCOS types) | e.g. broken pole = medium pole + crossarm + 3 insulators + 3 pins + grounding + guy + anchor | which compatible units (CUs) a crew replaces for each damage type. `04_load_labor.py` sums the AEP CU hours over each recipe | AEP × assumed | **check against the AEP structure-diagram PDF** and with a mentor |
+| `restoration.repair_recipes` | recloser, transformer, fuse cutout, switch… | CUs replaced for the damage types that don't depend on pole size or phases. Broken poles and downed wire are priced per record (next section) | AEP × assumed | mentor check |
 | `restoration.non_cu_hours.tree_on_line` | 3.0 | person-hours for tree removal (no CU in the AEP sheet) | assumed | ask a mentor |
 | `restoration.placeholder_labor_hours` | 0.5–6.0 per type | used only before `04_load_labor.py` has run | placeholder | — |
+
+### Repair work per damage record (`pipelines/03` + `04`, config `restoration.repair_work`)
+Follows the AEP data guide's chain exactly: **ARCOS damage → pole/primary attributes → number of phases → `structure_drawings.pdf` → construction units → `Install_Labor_HackOHIO.xlsx` hours → × 4.5 = person-hours.**
+
+| step | how | data |
+|---|---|---|
+| pole size | ARCOS pole points sit **on** mapped poles (median 0 m) → pole height → the workbook's size groups: small ≤ 35 ft, medium 40–55 ft, large ≥ 60 ft | known for 259/355 broken poles; unknown → medium (most common) |
+| phases | nearest primary segment within 30 m (median 3 m) → distinct letters in `phase_orde` (A/B/C) | matched for 96% of records; 75% single-phase |
+| framing | tangent construction from the drawings: single-phase (p5) = pole-top pin + insulator, neutral, ground; multi-phase (p9) adds a crossarm and a pin + insulator per phase | dead-end/corner poles (p3, p6–p8) would add guy + anchor (**+1.05 direct h, +4.7 person-h** per pole); ARCOS doesn't say which poles were dead-ends, so this is reported, not added |
+| downed wire | re-terminate the span + splice and re-tie each phase (secondary: splice + re-attach) | assumed (no drawing for conductor repair) |
+| access | ARCOS `Access_Iss = Yes` (a third of records) → AEP "Access Constraint Adder" added to that record | AEP × assumed mapping |
+
+Results: a medium three-phase pole replacement = 5.65 direct h → **26.3 person-hours** (the guide's worked example: 6 h × 4.5 = 27). The full storm history = **15,278 person-hours** over 1,648 records. For broken poles and downed wire, `labor_hours.csv` now holds the **observed average** over real records instead of one fixed recipe.
+
+## Storm restoration planner (`engines/planner.py`, `GET /api/planner/*`): the utility view
+Answers the guide's four questions for a whole storm by **replaying a real ARCOS storm**:
+
+1. **What is damaged?** Every damaged device, from the `03` attribution.
+2. **Who depends on it?** The premises behind each damaged device, from the topology.
+3. **What work fixes it?** Person-hours per record, from the repair-work model above.
+4. **What first, and how long?** Each free crew takes the device with the highest value per remaining crew-hour. Value = customers who come back when it's finished, plus the critical bonus; a device behind an unstarted upstream device is worth nothing yet. Each damage record is its own job, so crews can work one zone in parallel, and a customer is back when every damaged device on their path is fixed (step restoration).
+
+Outputs: hours to restore 50% / 90% / everyone; P10–P90 ranges (30 Monte Carlo runs on job durations); the restoration curve; the first repairs; and **crews and people needed to restore everyone in 2 days / 3 days / 1 week** at the chosen crew size.
+
+**Feb 2025 replay** (26,424 customers out, 11,799 person-hours): with 20 crews × 3 people, 50% are back in 15 h, 90% in ~73 h, everyone in ~9 days. Restoring everyone in 3 days takes ~60 crews of 3 (**180 people**); 2 days takes 291 people; 1 week takes 75 people.
+
+| key (`planner:`) | value | meaning |
+|---|---|---|
+| `min_records` | 10 | storms with at least this many records can be replayed (10 storms) |
+| `target_days` | 2, 3, 7 | the guide's scenarios |
+| `n_simulations` | 30 | Monte Carlo runs for the planning ranges |
+| `workload` (API) | 0.5–3 | scale the storm's recorded damage ("what if it were 1.5× worse") |
+
+Limits: no switching or back-feed (the switch layer isn't in the topology); crews work around the clock with no shift limits; crews don't pick jobs by geography beyond what the 4.5 travel multiplier already covers.
 
 ## Guidance: "What should I do?"
 
@@ -137,3 +172,4 @@ Rules, not generation: risk band × duration bucket × **declared** needs select
 5. Storm history is thin: 36 recorded storms, only 3 large. The model learns *where* damage happens mostly from one storm (Feb 2025, ~75% of all records).
 6. ARCOS gives damage locations, not customer outage records. "Out" means "damage on your upline path"; partial-phase or momentary outages aren't captured.
 7. Restoration ranges are not yet backtested: ARCOS repair dates look like record-closure dates (see DATA_NOTES).
+8. The planner replays recorded damage with no switching or back-feed, and crews never rest. Real restorations are slower per crew but can re-route power.

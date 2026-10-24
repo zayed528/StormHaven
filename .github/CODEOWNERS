@@ -12,6 +12,9 @@
 /pipelines/_rates.py                   @AKSHAT_GH
 /pipelines/07_weather.py               @AKSHAT_GH
 /pipelines/09_model_v1.py              @AKSHAT_GH
+/backend/app/engines/planner.py        @AKSHAT_GH
+/backend/app/planner_routes.py         @AKSHAT_GH
+/backend/tests/test_planner.py         @AKSHAT_GH
 /backend/tests/test_model.py           @AKSHAT_GH
 /backend/app/weather.py                @NANDAN_GH @AKSHAT_GH
 /docs/ASSUMPTIONS.md                   @AKSHAT_GH

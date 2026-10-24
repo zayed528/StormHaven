@@ -15,12 +15,20 @@ Outputs (contract: backend/app/core/data_loader.py):
   labor_hours.csv     damage_type, hours, source
   multipliers.json    {"indirect_labor_multiplier": x}
   access_adders.json  {"limited": h, "blocked": h}
+  damage_work.csv     one row per ARCOS damage record (if 03 has run): pole size, phases, CUs priced,
+                      direct_hours, access_hours, person_hours (= direct x indirect labor multiplier)
+
+Repair work per record follows the AEP data guide: damage -> pole/primary attributes -> number of phases ->
+structure_drawings.pdf framing -> CUs -> hours (config: restoration.repair_work). For broken_pole and wire_down,
+labor_hours.csv then holds the OBSERVED average over real ARCOS records (real pole sizes and phase mix) instead
+of one fixed recipe.
 """
 import json
 import re
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -152,11 +160,85 @@ for dtype, recipe in CFG["repair_recipes"].items():
 for dtype, h in CFG["non_cu_hours"].items():
     labor.append({"damage_type": dtype, "hours": float(h), "source": "assumed (no CU equivalent)"})
 
+# 6) Repair work per ARCOS record (needs 03's damage_attributed.csv: pole height + phases per record)
+RW = CFG["repair_work"]
+
+
+def recipe_hours(recipe) -> float:
+    """Direct hours for [[cu, qty, work], ...]: replace = removal + install, install = install only."""
+    return float(sum(q * (hours.loc[k].install_hours + (hours.loc[k].removal_hours if w == "replace" else 0))
+                     for k, q, w in recipe))
+
+
+def pole_size(ft) -> str:
+    if ft != ft:                                            # NaN: height unknown or no pole matched
+        return RW["unknown_pole_size"]
+    for size, (lo, hi) in RW["pole_size_by_height_ft"].items():
+        if lo <= ft <= hi:
+            return size
+    return RW["unknown_pole_size"]
+
+
+def framing(n_phases: int) -> list:
+    """Tangent framing from structure_drawings.pdf: base + crossarm if multi-phase + pin & insulator per phase."""
+    return (RW["framing_base"] + (RW["framing_multi_phase_extra"] if n_phases > 1 else [])
+            + [[k, q * n_phases, w] for k, q, w in RW["framing_per_phase"]])
+
+
+def record_work(rec) -> tuple[str, str, float]:
+    """(damage_type, what was priced, direct hours) for one ARCOS record."""
+    n = int(rec.phases) if rec.phases == rec.phases else RW["unknown_phases"]
+    if rec.damage_type == "broken_pole":
+        size = pole_size(rec.pole_height_ft)
+        return f"{size} pole, {n}-phase", recipe_hours([[f"POL_{size}", 1, "replace"]] + framing(n))
+    if rec.damage_type == "wire_down":
+        if rec.asset_type == "secondary":
+            return "secondary conductor", recipe_hours(RW["secondary_wire_down"])
+        return f"{n}-phase primary span", recipe_hours(RW["wire_down_base"] +
+                                                      [[k, q * n, w] for k, q, w in RW["wire_down_per_phase"]])
+    std = {r["damage_type"]: r["hours"] for r in labor}
+    return "standard recipe", float(std.get(rec.damage_type, CFG["unknown_damage_type_hours"]))
+
+
+att_path = OUT / "damage_attributed.csv"
+work = None
+if att_path.exists():
+    att = pd.read_csv(att_path, dtype={"node_id": str})
+    if {"pole_height_ft", "phases"} <= set(att.columns):
+        priced = [record_work(r) for r in att.itertuples()]
+        access_adder = float(by_intent.get(RW["access_issue_adder_row"]) or 0)
+        work = att[["event_id", "node_id", "kind", "damage_type", "asset_type", "access_issue"]].copy()
+        work["work"] = [w for w, _ in priced]
+        work["direct_hours"] = [round(h, 3) for _, h in priced]
+        work["access_hours"] = np.where(att.access_issue.eq("Yes"), access_adder, 0.0)
+        work["person_hours"] = ((work.direct_hours + work.access_hours) * ilm).round(2)
+        # Observed averages (without the per-record access adder: the restoration engine applies road access
+        # through the scenario, so it would be counted twice) replace the fixed recipes for these types.
+        for dtype in ["broken_pole", "wire_down"]:
+            sub = work[work.damage_type == dtype]
+            if len(sub):
+                for r in labor:
+                    if r["damage_type"] == dtype:
+                        r["hours"] = round(float(sub.direct_hours.mean()), 3)
+                        r["source"] = f"AEP CU hours x structure drawings x observed ARCOS mix (n={len(sub)})"
+        deadend = recipe_hours(RW["deadend_extra"])
+
 OUT.mkdir(parents=True, exist_ok=True)
+if work is not None:
+    work.to_csv(OUT / "damage_work.csv", index=False)
 cu.round(4).to_csv(OUT / "cu_hours.csv", index=False)
 pd.DataFrame(labor).to_csv(OUT / "labor_hours.csv", index=False)
 (OUT / "multipliers.json").write_text(json.dumps({"indirect_labor_multiplier": ilm}))
 (OUT / "access_adders.json").write_text(json.dumps(adders))
 print(f"{BOOK.name}: {len(cu)} CU rows, {len(labor)} damage types, indirect multiplier + {len(adders)} access adders")
 print(pd.DataFrame(labor).to_string(index=False))
-print(f"-> {OUT}/cu_hours.csv, labor_hours.csv, multipliers.json, access_adders.json")
+if work is not None:
+    print("\nrepair work per ARCOS record (direct hours; person-hours = x indirect multiplier):")
+    print(work.groupby("work").agg(records=("direct_hours", "size"), direct_h=("direct_hours", "mean"),
+                                   person_h=("person_hours", "mean")).round(2).sort_values("records", ascending=False)
+          .head(12).to_string())
+    print(f"total storm-history work: {work.person_hours.sum():,.0f} person-hours over {len(work)} records; "
+          f"dead-end sensitivity: +{deadend:.2f} direct h ({deadend * ilm:.1f} person-h) per pole if every "
+          f"broken pole were a dead-end")
+print(f"-> {OUT}/cu_hours.csv, labor_hours.csv, multipliers.json, access_adders.json"
+      + (", damage_work.csv" if work is not None else ""))

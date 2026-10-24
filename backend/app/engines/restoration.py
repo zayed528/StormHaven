@@ -27,15 +27,31 @@ CFG = ASSUMPTIONS["restoration"]
 _PRIORITY_CACHE: dict[int, dict[str, float]] = {}
 
 
+def crew_size(sc: StormScenario) -> int:
+    """People per crew for this scenario: the scenario's choice, else the config default."""
+    return sc.crew_size or CFG["crew_size_persons"]
+
+
+def _expected_person_hours(store: DataStore, kind: str) -> float:
+    """Average direct labor hours to repair a device of this kind, from its historical damage-type mix."""
+    mix = store.damage_mix.get(kind) or {"wire_down": 1.0}
+    total = sum(mix.values()) or 1.0
+    return sum(share * store.labor_hours.get(t, CFG["unknown_damage_type_hours"]) for t, share in mix.items()) / total
+
+
 def _priority_percentiles(store: DataStore) -> dict[str, float]:
-    """Rank every device by restoration priority -> percentile in [0,1] (1 = first)."""
+    """Rank every device by restoration priority -> percentile in [0,1] (1 = first).
+    Value vs effort (AEP data guide): (customers restored + critical bonus) / expected repair hours."""
     if id(store) in _PRIORITY_CACHE:
         return _PRIORITY_CACHE[id(store)]
     g = store.graph
     bonus = CFG["critical_facility_priority_bonus"]
     devs = [n for n, d in g.nodes(data=True) if d["kind"] != "premise"]
-    # Score = customers this device brings back, plus a large bonus if a hospital/fire/EMS sits downstream.
-    score = {n: g.nodes[n]["customers"] + (bonus if g.nodes[n]["critical_downstream"] else 0) for n in devs}
+    # Value = customers this device brings back, plus a large bonus if a hospital/fire/EMS sits downstream.
+    # Effort = expected repair hours for this kind of device. Highest value per hour goes first.
+    effort = {k: max(_expected_person_hours(store, k), 0.1) for k in {g.nodes[n]["kind"] for n in devs}}
+    score = {n: (g.nodes[n]["customers"] + (bonus if g.nodes[n]["critical_downstream"] else 0))
+             / effort[g.nodes[n]["kind"]] for n in devs}
     order = sorted(devs, key=lambda n: score[n])          # ascending: last = highest priority
     _PRIORITY_CACHE[id(store)] = {n: (i + 1) / len(order) for i, n in enumerate(order)}
     return _PRIORITY_CACHE[id(store)]
@@ -52,7 +68,7 @@ def _simulate(store: DataStore, pr: PathRisk, sc: StormScenario, n: int, seed: i
     g, path = store.graph, pr.path
     k = len(path)
     prio = _priority_percentiles(store)
-    to_clock_hours = store.indirect_multiplier / CFG["crew_size_persons"]   # person-hours -> crew clock hours
+    to_clock_hours = store.indirect_multiplier / crew_size(sc)             # person-hours -> crew clock hours
     unknown_hrs = CFG["unknown_damage_type_hours"]
     access = CFG["access_multipliers"][sc.road_access.value]
     # Total storm-wide work ahead of everyone, in crew clock-hours; grows with storm severity.
@@ -194,7 +210,7 @@ def estimate_restoration(store: DataStore, pr: PathRisk, sc: StormScenario,
             # Assumptions are stated in plain language so the customer sees what the range depends on.
             assumptions=[f"{sc.crews_available} crews available storm-wide.",
                          f"Road access: {sc.road_access.value}.",
-                         f"Each repair crew has {CFG['crew_size_persons']} people.",
+                         f"Each repair crew has {crew_size(sc)} people.",
                          ("Repair times use AEP's standard labor hours plus travel and setup time."
                           if store.labor_from_aep else
                           "Repair times use placeholder labor hours until AEP's labor sheet is loaded."),

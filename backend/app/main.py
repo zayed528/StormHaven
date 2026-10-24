@@ -16,6 +16,7 @@ from app.ai.agent import chat                                   # noqa: E402
 from app.console import router as console_router              # noqa: E402
 from app.core.data_loader import get_store                      # noqa: E402
 from app.map_layers import map_layers                           # noqa: E402
+from app.planner_routes import router as planner_router        # noqa: E402
 from app.schemas import (ConciergeRequest, ConciergeResponse,   # noqa: E402
                          CustomerProfile, StormScenario)
 from app.service import run_concierge                           # noqa: E402
@@ -28,6 +29,8 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 # Utility operator console (read-only, GET /api/console/*): app/console.py.
 app.include_router(console_router)
+# Storm restoration planner (read-only, GET /api/planner/*): app/planner_routes.py + engines/planner.py.
+app.include_router(planner_router)
 
 
 @app.get("/api/health")

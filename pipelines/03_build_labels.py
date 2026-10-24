@@ -39,7 +39,9 @@ from _rates import fit_rates, storm_exposure      # shared with 05 so the backte
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW, OUT = ROOT / "data" / "raw", ROOT / "data" / "processed"
-CFG = yaml.safe_load((ROOT / "config" / "assumptions.yaml").read_text())["risk"]
+_ASSUMPTIONS = yaml.safe_load((ROOT / "config" / "assumptions.yaml").read_text())
+CFG = _ASSUMPTIONS["risk"]
+RW = _ASSUMPTIONS["restoration"]["repair_work"]
 
 
 def _require(*paths):
@@ -71,6 +73,9 @@ DAMAGE_NAME_MAP = {
 OWN_DEVICE = {"Fuse Bank": ("fuse", 100), "Recloser Bank": ("recloser", 150), "Transformer": ("transformer", 100)}
 SECONDARY_ASSETS = {"secondary"}            # -> nearest transformer
 LINE_MAX_DIST_M = 1000                      # line/pole damage -> nearest transformer within this distance
+# Repair-work attributes (AEP data guide: damage -> pole/primary attributes -> phases -> structure -> labor)
+POLES = RAW / "Pole_Clip.shp"; POLE_HEIGHT = "height"       # values like "40 Feet" / "Unknown"
+PRIMARY = RAW / "Primary_ExportFeatures.shp"; PHASES = "phase_orde"   # "A", "BC", "ABC", "CBA", ...
 PROTECTIVE_KINDS = {"fuse", "recloser", "breaker"}
 # --------------------------------------------------------------------------
 _require(ARCOS, OUT / "nodes_base.csv", OUT / "edges.csv")
@@ -131,6 +136,26 @@ is_sec = rest.loc[j.index, A["asset"]].isin(SECONDARY_ASSETS)
 dmg.loc[j.index, "node_id"] = [xf if s else protective_zone(xf) for xf, s in zip(j.node_id, is_sec)]
 dmg.loc[j.index, "method"] = np.where(is_sec, "secondary_to_transformer", "line_to_protective_zone")
 dmg.loc[j.index, "dist_m"] = j.dist_m.values
+# Repair-work attributes per record (used by 04 to price the repair):
+#  pole_height_ft: nearest mapped pole (ARCOS pole points sit exactly on poles; median 0 m) -> pole size
+#  phases: distinct phases on the nearest primary segment (A/B/C letters) -> single- vs multi-phase framing
+dmg["pole_height_ft"], dmg["phases"] = np.nan, np.nan
+if POLES.exists() and PRIMARY.exists():
+    poles = gpd.read_file(POLES, columns=[POLE_HEIGHT]).to_crs(3857)
+    poles["ft"] = pd.to_numeric(poles[POLE_HEIGHT].astype(str).str.extract(r"(\d+)")[0], errors="coerce")
+    is_pole = dmg[A["asset"]] == "Pole"
+    jp = gpd.sjoin_nearest(dmg.loc[is_pole, ["geometry"]], poles[["ft", "geometry"]],
+                           max_distance=RW["pole_match_max_m"])
+    jp = jp[~jp.index.duplicated()]
+    dmg.loc[jp.index, "pole_height_ft"] = jp.ft
+    prim = gpd.read_file(PRIMARY, columns=[PHASES]).to_crs(3857)
+    prim["n"] = prim[PHASES].fillna("").str.upper().str.replace(r"[^ABC]", "", regex=True).map(lambda x: len(set(x)))
+    prim = prim[prim.n > 0]
+    jl = gpd.sjoin_nearest(dmg[["geometry"]], prim[["n", "geometry"]], max_distance=RW["phase_match_max_m"])
+    jl = jl[~jl.index.duplicated()]
+    dmg.loc[jl.index, "phases"] = jl.n
+    print(f"repair attributes: pole height known for {int(dmg.pole_height_ft.notna().sum())}/{int(is_pole.sum())} "
+          f"broken poles; phases matched for {dmg.phases.notna().mean():.0%} of records")
 dmg = dmg.drop(columns="geometry")
 att = dmg[dmg.node_id.notna()].copy()
 print(f"ARCOS records: {n_raw} raw, {len(dmg)} after excluding {sorted(EXCLUDED_ASSETS)}, "
@@ -186,7 +211,8 @@ n_prem = int((nodes.kind == "premise").sum())
 share_out = (labels.groupby("event_id").size() / n_prem).reindex(sizes.index).fillna(0)
 
 # 9) Attributed records (QA + backtest) and durations (day resolution; unrepaired records excluded)
-att[["event_id", "report_day", "node_id", "kind", "damage_type", "method", "dist_m", A["asset"], A["access"]]] \
+att[["event_id", "report_day", "node_id", "kind", "damage_type", "method", "dist_m", A["asset"], A["access"],
+     "pole_height_ft", "phases"]] \
     .rename(columns={A["asset"]: "asset_type", A["access"]: "access_issue"}) \
     .to_csv(OUT / "damage_attributed.csv", index=False)
 rep = att[att[A["repaired_flag"]] == "Yes"].copy()

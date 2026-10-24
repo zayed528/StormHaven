@@ -43,9 +43,18 @@ def test_restoration_order_upstream_first():
     assert body["circuit_id"] == cid and body["source"] == "model_estimate"
     ranks = [o["rank"] for o in body["order"]]
     assert ranks == sorted(ranks)                                  # ranks are 1..N in order
-    # Priority order: a device ranked earlier restores at least as many customers as the next.
+    # Priority order = the restoration engine's ranking (value vs effort: customers + critical bonus per expected
+    # repair hour, per the AEP data guide), so the console and the customer answer always agree.
+    from app.core.data_loader import get_store
+    from app.engines.restoration import _priority_percentiles
+    store = get_store()
+    prio = _priority_percentiles(store)
+    g = store.graph
+    devs = sorted((n for n, d in g.nodes(data=True)
+                   if d.get("circuit_id") == cid and d["kind"] in {"breaker", "recloser", "fuse"}),
+                  key=lambda n: -prio[n])
     restored = [o["customers_restored"] for o in body["order"]]
-    assert all(a >= b for a, b in zip(restored, restored[1:])) or len(restored) <= 1
+    assert restored == [int(g.nodes[n]["customers"]) for n in devs[:len(restored)]]
 
 
 def test_restoration_unknown_circuit_404():

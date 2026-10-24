@@ -72,6 +72,36 @@ restoration:
     recloser_damaged:   [[REC, 1, replace], [EQL, 2, replace], [GND, 1, replace]]
     fuse_cutout_damaged: [[XCO, 1, replace]]           # ARCOS "Fuse Bank / Damaged Switch"
     switch_damaged:     [[SWI, 1, replace]]            # ARCOS "Switch / Damaged Switch"
+  # Repair work PER ARCOS DAMAGE RECORD, following the AEP data guide:
+  #   damage -> pole/primary attributes -> number of phases -> structure_drawings.pdf -> CUs -> labor hours.
+  # 03 attaches each record's pole height and phase count; 04 turns them into direct hours (AEP CU sheet)
+  # and person-hours (x the AEP indirect labor multiplier). The observed mix also sets labor_hours.csv for
+  # broken_pole / wire_down, replacing the fixed recipes above for those two types.
+  repair_work:
+    pole_match_max_m: 25            # ARCOS pole point -> nearest Pole_Clip pole (median observed: 0 m)
+    phase_match_max_m: 30           # damage point -> nearest primary segment (median observed: 3 m)
+    # AEP workbook "Pole CU Average Hours by Size" groups: Small 25-35 ft, Medium 40-55 ft, Large 60 ft+.
+    # Heights between groups go to the nearer one; shorter service poles count as small. source: AEP
+    pole_size_by_height_ft: {small: [0, 37], medium: [38, 57], large: [58, 999]}
+    unknown_pole_size: medium       # height "Unknown" (~28% of broken poles) -> most common size. source: assumed
+    unknown_phases: 1               # no primary within phase_match_max_m -> single phase (75% of matches). assumed
+    # Framing from structure_drawings.pdf, TANGENT construction (line passes straight through the pole):
+    #   single-phase (p5): pole-top pin + insulator per phase, neutral assembly, grounding
+    #   multi-phase  (p9): + crossarm (pins and insulators per phase on the arm and pole top)
+    # Neutral/secondary attachment is priced with the closest CU (SAA). Dead-end/corner poles (p3, p6-p8)
+    # also need guying + anchor; ARCOS doesn't say which poles were dead-ends, so tangent is used and the
+    # dead-end extra is reported as a sensitivity (pipelines/04), not added. source: AEP drawings x assumed
+    framing_base: [[SAA, 1, replace], [GND, 1, replace]]
+    framing_multi_phase_extra: [[ARM, 1, replace]]
+    framing_per_phase: [[PIN, 1, replace], [INS, 1, replace]]
+    deadend_extra: [[GYF, 1, replace], [ANC, 1, replace]]
+    # Downed primary conductor: re-terminate the span + splice and re-tie each phase. Secondary: splice +
+    # re-attach. source: assumed (no drawing for conductor repair)
+    wire_down_base: [[DEC, 2, replace]]
+    wire_down_per_phase: [[CNC, 2, install], [INS, 1, replace]]
+    secondary_wire_down: [[CNC, 2, install], [SAA, 1, replace]]
+    # ARCOS Access_Iss = "Yes" -> this AEP "Labor only work" adder (direct hours) is added to that record.
+    access_issue_adder_row: Access Constraint Adder
   # Damage types with no CU equivalent in the AEP sheet (person-hours). source: assumed
   non_cu_hours:
     tree_on_line: 3.0
@@ -125,3 +155,11 @@ privacy:
     - assumptions
     - missing_data
     - guidance            # curated library text only
+
+planner:                   # storm restoration planner (backend/app/engines/planner.py)
+  min_records: 10          # storms with at least this many ARCOS records can be planned. source: assumed
+  target_days: [2, 3, 7]   # "restore everyone in 2 days / 3 days / 1 week" (AEP data guide, section 5)
+  n_simulations: 30        # Monte Carlo runs on job durations for the planning ranges. source: assumed
+  max_crews: 2000          # search cap for "crews needed". source: assumed
+  top_jobs: 10             # first repairs listed in the plan
+  seed: 7

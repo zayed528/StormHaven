@@ -29,6 +29,8 @@ class StormScenario(BaseModel):
     severity_percentile: float = Field(50, ge=0, le=100,
         description="How bad vs. historical events (50 = median storm)")
     crews_available: int = Field(20, ge=1, le=500)     # storm-wide crews; divides the queue wait
+    crew_size: Optional[int] = Field(None, ge=2, le=8,
+        description="People per crew (AEP data guide: 2-8). None = restoration.crew_size_persons in config.")
     road_access: AccessLevel = AccessLevel.normal
     extra_damage: list[DamageItem] = []
 

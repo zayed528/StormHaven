@@ -49,8 +49,12 @@ def _change_reason(now: StormScenario, before: StormScenario | None, words: dict
     out = []
     if now.severity_percentile != before.severity_percentile:
         out.append(r["storm_stronger"] if now.severity_percentile > before.severity_percentile else r["storm_weaker"])
-    if now.crews_available != before.crews_available:
-        out.append(r["more_crews"] if now.crews_available > before.crews_available else r["fewer_crews"])
+    # Workforce = crews x people per crew, so a bigger crew size reads as "more repair crews available".
+    default_size = ASSUMPTIONS["restoration"]["crew_size_persons"]
+    people_now = now.crews_available * (now.crew_size or default_size)
+    people_before = before.crews_available * (before.crew_size or default_size)
+    if (now.crews_available, now.crew_size) != (before.crews_available, before.crew_size):
+        out.append(r["more_crews"] if people_now >= people_before else r["fewer_crews"])
     if now.road_access != before.road_access:
         worse = ACCESS_RANK[now.road_access.value] > ACCESS_RANK[before.road_access.value]
         out.append(r["roads_worse"] if worse else r["roads_better"])
