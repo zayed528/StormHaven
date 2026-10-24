@@ -63,7 +63,7 @@ export default function ResultsPanel({ result }) {
             <h3>How long, if you lose power</h3>
             <p><strong>{restoration.range_text}</strong></p>
             <ul>{restoration.drivers.map((d, i) => <li key={i}>{d.plain_language}</li>)}</ul>
-            <StepTimeline steps={restoration.steps} />
+            <StepTimeline restoration={restoration} />
           </>)}
           <details><summary>Assumptions, missing data, and limits</summary>
             <ul>{trust.map((a, i) => <li key={`a${i}`}>{a}</li>)}</ul>

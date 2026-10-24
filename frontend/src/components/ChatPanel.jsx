@@ -41,6 +41,7 @@ export default function ChatPanel({ premiseId, scenario, profile }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
+  const [needHome, setNeedHome] = useState(false);  // true = they tried to ask before picking a home
   const logRef = useRef(null);
   const inputRef = useRef(null);
   const closeRef = useRef(null);
@@ -52,17 +53,19 @@ export default function ChatPanel({ premiseId, scenario, profile }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [history, busy, open]);
 
-  // On open, put keyboard focus inside the window (the input, or Close if no home is selected yet).
-  useEffect(() => {
-    if (open) (premiseId ? inputRef : closeRef).current?.focus();
-  }, [open]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // On open, put keyboard focus in the question box.
+  useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
+  // Once a home is picked, drop the "pick your home first" nudge.
+  useEffect(() => { if (premiseId) setNeedHome(false); }, [premiseId]);
 
   // Closing returns focus to the robot button so keyboard users don't get lost.
   const close = () => { setOpen(false); launcherRef.current?.focus(); };
 
   // Shared by the form and the suggested-question buttons. Sends the whole conversation; the backend is stateless.
   const ask = async (q) => {
-    if (!q.trim() || busy || !premiseId) return;
+    if (!q.trim() || busy) return;
+    // Answers are about one location, so ask for it first (keeps the typed question for after).
+    if (!premiseId) { setNeedHome(true); return; }
     const next = [...history, { role: "user", content: [{ text: q.trim() }] }];
     setHistory(next); setText(""); setBusy(true);
     try {
@@ -87,9 +90,13 @@ export default function ChatPanel({ premiseId, scenario, profile }) {
         <h2>Ask StormHaven</h2>
         <button ref={closeRef} type="button" className="chat-close" onClick={close} aria-label="Close assistant">×</button>
       </div>
+      {!premiseId && (
+        <p className={`chat-hint${needHome ? " nudge" : ""}`} role={needHome ? "alert" : undefined}>
+          {needHome ? "First, pick your home: " : ""}Click a dot on the map or enter your premise ID, then ask me
+          about your storm outlook.</p>)}
       <div className="chips" role="group" aria-label="Suggested questions">
         {SUGGESTED.map((q) => (
-          <button key={q} type="button" onClick={() => ask(q)} disabled={!premiseId || busy}>{q}</button>))}
+          <button key={q} type="button" onClick={() => ask(q)} disabled={busy}>{q}</button>))}
       </div>
       <div className="chat-log" ref={logRef} aria-live="polite">
         {history.map((m, i) => m.role === "assistant"
@@ -99,10 +106,9 @@ export default function ChatPanel({ premiseId, scenario, profile }) {
       </div>
       <form onSubmit={send}>
         <input ref={inputRef} value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. Will I lose power?"
-          aria-label="Your question" disabled={!premiseId} />
-        <button type="submit" disabled={!premiseId || busy}>{busy ? "Sending…" : "Send"}</button>
+          aria-label="Your question" />
+        <button type="submit" disabled={busy}>{busy ? "Sending…" : "Send"}</button>
       </form>
-      {!premiseId && <p className="muted">Select your home on the map first.</p>}
     </section>
   </>);
 }

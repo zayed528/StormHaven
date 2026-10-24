@@ -76,10 +76,13 @@ figure { margin: .5rem 0 0; } figcaption { font-size: .8rem; font-weight: 600; c
 
 /* chat: suggested questions, AI label, thinking line, fixed safety message */
 .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .5rem; }
-.chips button { padding: .35rem .75rem; border: 1px solid var(--line); background: var(--bg); border-radius: 999px;
-  font: inherit; font-size: .9rem; cursor: pointer; }
-.chips button:hover:not(:disabled) { border-color: var(--ink); }
-.chips button:disabled { opacity: .5; cursor: not-allowed; }
+.chips button { padding: .35rem .75rem; border: 1px solid #C9D6EA; background: #EEF3FF; color: var(--ink);
+  border-radius: 999px; font: inherit; font-size: .9rem; cursor: pointer; }
+.chips button:hover:not(:disabled) { border-color: var(--ink); background: #E1EAFB; }
+.chips button:disabled { opacity: .7; cursor: wait; }        /* only while a reply is loading */
+/* "pick your home first" hint; turns yellow + bold if they try to ask without one */
+.chat-hint { margin: 0 0 .6rem; padding: .5rem .7rem; font-size: .9rem; background: #EEF3FF; border-left: 4px solid #1D4ED8; }
+.chat-hint.nudge { background: #FFF4D6; border-left-color: #E3B23C; font-weight: 600; }
 .ai-tag { display: block; font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
   color: var(--muted); margin-bottom: .25rem; }
 .chat-log p.typing { font-style: italic; color: var(--muted); }
@@ -89,3 +92,28 @@ figure { margin: .5rem 0 0; } figcaption { font-size: .8rem; font-weight: 600; c
   .chat { left: .5rem; right: .5rem; width: auto; bottom: 5.25rem; height: calc(100vh - 6.5rem); }
   .chat-launcher { right: .75rem; bottom: .75rem; }
 }
+/* storm level slider: 4 labeled stops under the track */
+.storm-ticks { display: flex; justify-content: space-between; gap: .25rem; font-size: .75rem; color: var(--muted); }
+.storm-ticks span { flex: 1; text-align: center; }
+.storm-ticks span:first-child { text-align: left; } .storm-ticks span:last-child { text-align: right; }
+/* step timeline chart: shaded likely range (P10-P90), dashed best guess (P50), numbered repair steps */
+.tl figcaption { font-size: .85rem; font-weight: 600; color: var(--ink); margin-bottom: .4rem; }
+.tl-plot { position: relative; padding: 4px 0; border-bottom: 2px solid var(--line); }
+.tl-band { position: absolute; top: 0; bottom: 0; background: #DCE6F2; border-radius: 4px; }
+.tl-p50 { position: absolute; top: 0; bottom: 0; border-left: 2px dashed var(--ink); }
+.tl-row { position: relative; height: 30px; }
+.tl-dot { position: absolute; top: 50%; z-index: 1; transform: translate(-50%, -50%); box-sizing: border-box;
+  width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 2px solid var(--muted);
+  display: grid; place-items: center; font-size: .72rem; font-weight: 700; color: var(--ink); }
+.tl-dot.yours { width: 24px; height: 24px; background: var(--ink); border-color: var(--ink); color: #fff; }
+.tl-yours { position: absolute; top: 50%; z-index: 1; transform: translate(16px, -50%); white-space: nowrap;
+  font-size: .8rem; font-weight: 700; background: rgba(255, 255, 255, .9); padding: 0 .3rem; }
+.tl-yours.flip { transform: translate(calc(-100% - 16px), -50%); }
+.tl-axis { position: relative; height: 1.3rem; font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tl-axis span { position: absolute; top: .2rem; transform: translateX(-50%); white-space: nowrap; }
+.tl-axis span.start { transform: none; }
+.tl-legend { display: flex; flex-wrap: wrap; gap: .2rem 1rem; margin: .2rem 0 0; font-size: .8rem; }
+.sw { display: inline-block; vertical-align: middle; margin-right: .3rem; }
+.sw.band { width: 18px; height: 10px; background: #DCE6F2; border-radius: 2px; }
+.sw.p50 { width: 0; height: 12px; border-left: 2px dashed var(--ink); }
+.sw.dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--muted); }
