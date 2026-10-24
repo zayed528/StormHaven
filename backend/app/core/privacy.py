@@ -34,13 +34,16 @@ _PHONE = re.compile(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b")
 _EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.]+\b")
 _SSN = re.compile(r"\b\d{3}[-\s]\d{2}[-\s]\d{4}\b")
 _PO_BOX = re.compile(r"\bP\.?\s*O\.?\s+Box\s+\w+\b", re.I)
-_NAMED_PERSON = re.compile(r"\b(?:my name is|I am|I'm)\s+[A-Z][A-Za-z'’-]+(?:\s+[A-Z][A-Za-z'’-]+)?\b")
+_NAMED_PERSON = re.compile(
+    r"\b(?:(?i:my name is|i['’]?m called)\s+[A-Za-z'’-]+(?:\s+[A-Za-z'’-]+)?|"
+    r"I am\s+[A-Z][A-Za-z'’-]+(?:\s+[A-Z][A-Za-z'’-]+)?)\b",
+)
 _STREET_ADDRESS = re.compile(
     r"\b\d{1,6}\s+(?:[A-Z0-9.'-]+\s+){0,5}"
     r"(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|way)\b\.?,?",
     re.I,
 )
-# Free-text health details are not needed by Claude. The structured, opt-in declared-needs categories are enough.
+# Free-text health details are not needed by the model. Structured, opt-in declared-needs categories are enough.
 _SENSITIVE_HEALTH = re.compile(
     r"\b(?:ventilator|cpap|dialysis|insulin|oxygen\s+(?:tank|concentrator)|"
     r"powered\s+medical\s+equipment|refrigerated\s+medication)\b",
