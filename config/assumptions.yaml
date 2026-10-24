@@ -104,6 +104,11 @@ alerts:                    # all source: assumed (documented challenge rules)
 privacy:
   # Only these fields may ever be sent to the LLM.
   llm_field_allowlist:
+    - risk_source
+    - restoration_source
+    - data_mode
+    - outage_confirmed
+    - confirmation_mode
     - band
     - probability
     - confidence

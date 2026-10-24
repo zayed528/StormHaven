@@ -11,7 +11,13 @@ def get_client():
     global _client
     if _client is None and os.getenv("BEDROCK_MODEL_ID"):
         import boto3          # imported here so offline dev doesn't need AWS set up
-        _client = boto3.client("bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-1"))
+        from botocore.config import Config
+        config = Config(
+            connect_timeout=float(os.getenv("BEDROCK_CONNECT_TIMEOUT_SECONDS", "3")),
+            read_timeout=float(os.getenv("BEDROCK_READ_TIMEOUT_SECONDS", "12")),
+            retries={"max_attempts": int(os.getenv("BEDROCK_MAX_ATTEMPTS", "2")), "mode": "standard"},
+        )
+        _client = boto3.client("bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-1"), config=config)
     return _client
 
 
