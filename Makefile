@@ -33,3 +33,5 @@ pipelines:        ## full data build; each step needs the previous step's output
 	$(PY) pipelines/05_train_and_backtest.py
 	$(PY) pipelines/06_export_map_layers.py
 	$(PY) pipelines/07_weather.py
+	$(PY) pipelines/08_features.py
+	$(PY) pipelines/09_model_v1.py
