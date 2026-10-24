@@ -9,6 +9,7 @@ export const STRINGS = {
     locale: "en-US",
     tr: (s) => s,             // backend sentences: already English
     languageAria: "Language",
+    themeAria: "Color theme", themeLight: "Light", themeDark: "Dark",
     skipToLookup: "Skip to premise ID lookup",
     viewsAria: "View", tabCustomer: "Customer view", tabConsole: "Utility console",
     mapAria: "Outage risk map. Click a dot to choose a location. Keyboard users: use the premise ID box above.",
@@ -97,6 +98,8 @@ export const STRINGS = {
     chatError: "I couldn't reach the assistant. Your question was not lost.", chatRetry: "Retry",
     chatPrivacy: "For privacy, don't enter names, addresses, account numbers, or medical details.",
     // map + weather
+    mapView: "Map view", mapDots: "Risk dots", mapHeat: "Heatmap",
+    heatLegend: "Green → red: more homes likely to lose power",
     mapLegend: "Outage risk", mapHover: (band, n) => `${band} risk${n ? ` · ${n} home${n === 1 ? "" : "s"}` : ""}`,
     wxTitle: "Forecast for the area", live: "live", nws: "National Weather Service:",
     wxDay: (gust) => `gusts up to ${gust} mph`, wxRain: (mm) => `, ${mm} mm rain`, wxSnow: (cm) => `, ${cm} cm snow`,
@@ -108,6 +111,7 @@ export const STRINGS = {
     locale: "es-US",
     tr: toEs,                 // backend sentences -> Spanish (unknown ones stay English)
     languageAria: "Idioma",
+    themeAria: "Tema de color", themeLight: "Claro", themeDark: "Oscuro",
     skipToLookup: "Ir a la búsqueda por número de servicio",
     viewsAria: "Vista", tabCustomer: "Vista del cliente", tabConsole: "Consola de la empresa",
     mapAria: "Mapa de riesgo de apagón. Haga clic en un punto para elegir una ubicación. Con teclado: use el cuadro de número de servicio de arriba.",
@@ -187,6 +191,8 @@ export const STRINGS = {
     thinking: "StormHaven está pensando…", aiLabel: "Explicación generada por IA", safetyMessage: "Mensaje de seguridad:",
     chatError: "No pudimos conectar con el asistente. Su pregunta no se perdió.", chatRetry: "Reintentar",
     chatPrivacy: "Por privacidad, no escriba nombres, direcciones, números de cuenta ni detalles médicos.",
+    mapView: "Vista del mapa", mapDots: "Puntos de riesgo", mapHeat: "Mapa de calor",
+    heatLegend: "Verde → rojo: más casas que probablemente se queden sin luz",
     mapLegend: "Riesgo de apagón", mapHover: (band, n) => `Riesgo ${band.toLowerCase()}${n ? ` · ${n} casa${n === 1 ? "" : "s"}` : ""}`,
     wxTitle: "Pronóstico para la zona", live: "en vivo", nws: "Servicio Meteorológico Nacional:",
     wxDay: (gust) => `ráfagas de hasta ${gust} mph`, wxRain: (mm) => `, ${mm} mm de lluvia`, wxSnow: (cm) => `, ${cm} cm de nieve`,
