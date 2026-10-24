@@ -32,6 +32,25 @@ _LONG_NUMBER = re.compile(r"\b\d{7,}\b")
 _LOCATION_CODE = re.compile(r"\b\d{5,}[A-Z]\d{3,}\b")
 _PHONE = re.compile(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b")
 _EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.]+\b")
+_SSN = re.compile(r"\b\d{3}[-\s]\d{2}[-\s]\d{4}\b")
+_PO_BOX = re.compile(r"\bP\.?\s*O\.?\s+Box\s+\w+\b", re.I)
+_NAMED_PERSON = re.compile(r"\b(?:my name is|I am|I'm)\s+[A-Z][A-Za-z'’-]+(?:\s+[A-Z][A-Za-z'’-]+)?\b")
+_STREET_ADDRESS = re.compile(
+    r"\b\d{1,6}\s+(?:[A-Z0-9.'-]+\s+){0,5}"
+    r"(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|way)\b\.?,?",
+    re.I,
+)
+# Free-text health details are not needed by Claude. The structured, opt-in declared-needs categories are enough.
+_SENSITIVE_HEALTH = re.compile(
+    r"\b(?:ventilator|cpap|dialysis|insulin|oxygen\s+(?:tank|concentrator)|"
+    r"powered\s+medical\s+equipment|refrigerated\s+medication)\b",
+    re.I,
+)
+_PROMPT_INJECTION = re.compile(
+    r"\b(?:ignore|override|reveal|repeat|disregard)\b.{0,50}\b(?:system|developer|previous|prompt|instruction)s?\b|"
+    r"\b(?:jailbreak|tool\s*call|act\s+as)\b",
+    re.I,
+)
 
 # Response fields that are machine identifiers, not customer text: left untouched.
 _NOT_TEXT = {"audit_id", "map_point_id", "name", "source", "band", "confidence", "phase", "channel",
@@ -66,6 +85,35 @@ def scrub_text(text: str) -> str:
     return text
 
 
+def sanitize_chat_text(text: str) -> str:
+    """Best-effort minimization for the single latest user question sent to Bedrock.
+
+    This is deliberately not described as complete PII detection; callers also discard older and assistant turns.
+    """
+    text = scrub_text(text)
+    text = _SSN.sub("[personal identifier hidden]", text)
+    text = _PO_BOX.sub("[address hidden]", text)
+    text = _STREET_ADDRESS.sub("[address hidden]", text)
+    text = _NAMED_PERSON.sub("[name hidden]", text)
+    text = _SENSITIVE_HEALTH.sub("[sensitive detail hidden]", text)
+    return _PROMPT_INJECTION.sub("[instruction removed]", text)
+
+
+def sanitize_chat_history(history: list[dict]) -> list[dict]:
+    """Sanitize all turns, then minimize Bedrock input to the latest user question.
+
+    Client-supplied assistant turns are display history, not trusted model history, so they never reach Bedrock.
+    """
+    sanitized = [
+        {
+            "role": message["role"],
+            "content": [{"text": sanitize_chat_text(block["text"])} for block in message["content"]],
+        }
+        for message in history
+    ]
+    return [sanitized[-1]]
+
+
 def _scrub(obj, key: str | None = None):
     """Walk a dumped model (dicts/lists/strings) and scrub every string except machine-identifier fields."""
     if isinstance(obj, str):
@@ -86,4 +134,4 @@ def llm_payload(d: dict) -> dict:
     """Strip anything not on the allowlist before sending to Bedrock.
     Allowlist (not blocklist): a new field is excluded until someone deliberately adds it in assumptions.yaml."""
     allow = set(ASSUMPTIONS["privacy"]["llm_field_allowlist"])
-    return {k: v for k, v in d.items() if k in allow}
+    return {k: _scrub(v, k) for k, v in d.items() if k in allow}

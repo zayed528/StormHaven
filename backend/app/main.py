@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from pydantic import BaseModel
 
 load_dotenv()      # read .env BEFORE importing app modules, so Bedrock/SNS settings are visible to them
 
@@ -17,8 +16,7 @@ from app.console import router as console_router              # noqa: E402
 from app.core.data_loader import get_store                      # noqa: E402
 from app.map_layers import map_layers                           # noqa: E402
 from app.planner_routes import router as planner_router        # noqa: E402
-from app.schemas import (ConciergeRequest, ConciergeResponse,   # noqa: E402
-                         CustomerProfile, StormScenario)
+from app.schemas import ChatRequest, ConciergeRequest, ConciergeResponse  # noqa: E402
 from app.service import run_concierge                           # noqa: E402
 from app.weather import weather_context                         # noqa: E402
 
@@ -53,24 +51,15 @@ def get_map(severity: float = 50):
     return map_layers(severity)
 
 
-# Chat request lives here (not schemas.py) because only this endpoint uses it.
-# history uses the Bedrock Converse shape: [{"role": "user"|"assistant", "content": [{"text": "..."}]}]
 @app.get("/api/weather")
 def get_weather():
     """Weather context: reference storms (slider labels), damage odds by wind, live 3-day forecast + NWS alerts.
     Context only: weather never changes a risk or restoration number."""
     return weather_context()
 
-
-class ChatRequest(BaseModel):
-    history: list[dict]
-    premise_id: str | None = None
-    circuit_id: str | None = None
-    scenario: StormScenario = StormScenario()
-    profile: CustomerProfile = CustomerProfile()
-
-
 @app.post("/api/chat")
 def chat_endpoint(req: ChatRequest):
     """One chat turn. The reply is already scrubbed; numbers in it come only from the engines."""
-    return {"reply": chat(req.history, req.premise_id, req.circuit_id, req.scenario, req.profile)}
+    history = [message.model_dump() for message in req.history]
+    return {"reply": chat(history, req.premise_id, req.circuit_id, req.scenario,
+                          req.profile, req.utility_status)}

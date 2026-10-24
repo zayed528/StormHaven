@@ -61,6 +61,10 @@ figure { margin: .5rem 0 0; } figcaption { font-size: .8rem; font-weight: 600; c
 .chat-log .user { justify-self: end; background: #E8EEF6; }
 .chat-log .assistant { justify-self: start; background: var(--bg); border: 1px solid var(--line); padding: .5rem .7rem; max-width: 85%; }
 .chat-log .assistant p { padding: 0; max-width: none; }
+.chat-error { display: flex; align-items: center; justify-content: space-between; gap: .75rem; color: var(--alert);
+  border-left: 4px solid var(--alert); background: #FBECEE; padding: .5rem .7rem; margin-bottom: .5rem; }
+.chat-error button { padding: .25rem .7rem; }
+.chat-privacy { margin: .5rem 0 0; font-size: .78rem; }
 .chat form { display: flex; gap: .5rem; }
 .chat input { flex: 1; padding: .5rem; font: inherit; }
 .chat button { padding: .5rem 1rem; font: inherit; }

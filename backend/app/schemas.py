@@ -6,7 +6,7 @@ Pydantic validates every request against these models, so bad input is rejected 
 from __future__ import annotations
 from enum import Enum
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # ---------- shared inputs ----------
@@ -78,6 +78,55 @@ class ConciergeRequest(BaseModel):
     previous_range_text: Optional[str] = None   # restoration.range_short from the last answer shown
     previous_scenario: Optional[StormScenario] = None   # scenario behind that answer -> "Reason:" in the update SMS
     utility_status: Optional[SimulatedUtilityStatus] = None   # None = no utility info yet
+
+
+# ---------- chat inputs ----------
+class ChatTextBlock(BaseModel):
+    """The only content block accepted from the browser for chat history."""
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(..., min_length=1, max_length=1200)
+
+    @field_validator("text")
+    @classmethod
+    def text_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("chat text must not be blank")
+        return value
+
+
+class ChatMessage(BaseModel):
+    """Strict, text-only subset of the Bedrock Converse message shape."""
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    content: list[ChatTextBlock] = Field(..., min_length=1, max_length=1)
+
+
+class ChatRequest(BaseModel):
+    """One stateless chat turn. Location and scenario remain server-controlled tool context."""
+    model_config = ConfigDict(extra="forbid")
+
+    history: list[ChatMessage] = Field(..., min_length=1, max_length=20)
+    premise_id: Optional[str] = Field(None, max_length=120)
+    circuit_id: Optional[str] = Field(None, max_length=120)
+    scenario: StormScenario = StormScenario()
+    profile: CustomerProfile = CustomerProfile()
+    # This is the existing demo toggle, not proof from a live AEP outage-management feed.
+    utility_status: Optional[SimulatedUtilityStatus] = None
+
+    @model_validator(mode="after")
+    def validate_turn_order(self):
+        if self.history[0].role != "user":
+            raise ValueError("chat history must start with a user message")
+        if self.history[-1].role != "user":
+            raise ValueError("chat history must end with the latest user message")
+        if any(a.role == b.role for a, b in zip(self.history, self.history[1:])):
+            raise ValueError("chat roles must alternate")
+        if sum(len(block.text) for message in self.history for block in message.content) > 12_000:
+            raise ValueError("chat history is too large")
+        return self
 
 
 # ---------- shared outputs ----------

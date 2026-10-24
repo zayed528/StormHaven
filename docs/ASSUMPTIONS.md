@@ -160,7 +160,7 @@ Rules, not generation: risk band × duration bucket × **declared** needs select
 
 | key | meaning |
 |---|---|
-| `privacy.llm_field_allowlist` | the only derived fields Bedrock ever receives: band, probability, confidence, factor text, P10/P50/P90, drivers, step text, declared needs, eligibility, assumptions, missing data, curated guidance text. No IDs, no coordinates, no facility data. |
+| `privacy.llm_field_allowlist` | the only derived fields Bedrock ever receives: source/data-mode/demo-confirmation labels, band, probability, confidence, factor text, P10/P50/P90, drivers, step text, declared needs, eligibility, assumptions, missing data, curated guidance text. No IDs, coordinates, raw AEP records, or facility locations. Bedrock returns only an answer-category decision; customer-facing facts are rendered from engine objects in Python. |
 | (code) `scrub_text` | removes coordinates, internal equipment IDs, phone numbers and emails from every customer-facing string and every SMS |
 | (code) map | premise coordinates rounded to 4 decimals; critical facilities never sent |
 

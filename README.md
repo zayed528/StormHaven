@@ -7,7 +7,7 @@
 3. **What should I do to prepare?** Curated, sourced safety and prep actions by risk × duration × **declared** needs.
 4. **Do I qualify for outage alerts?** Documented eligibility rules, timing, escalations, and EN/ES messages.
 
-Four deterministic engines compute every number. Claude on AWS Bedrock (with Guardrails) only **explains** results, through tool calls. Every answer separates **confirmed facts**, **model estimates**, and **customer actions**, and states its confidence, assumptions and missing data, with a fallback when we can't predict reliably.
+Four deterministic engines compute every customer-facing fact. Claude on AWS Bedrock (with Guardrails) routes the question to an answer category and may request one validated what-if scenario; the backend renders the answer directly from engine results. Claude-generated outage prose is never displayed. Every answer separates **demo confirmation state**, **model estimates**, and **customer actions**, with a deterministic fallback when Bedrock is unavailable or returns anything unexpected.
 
 Challenge brief: [docs/aep_challenge.pdf](docs/aep_challenge.pdf)
 
@@ -89,7 +89,7 @@ Hour-by-hour plan, ownership and git rules: [docs/TEAM_TASKS.md](docs/TEAM_TASKS
 ## Hard rules
 - No secrets in code. AEP data goes in git **only** as the archives in `data/archives/` (team decision; the repo is private). Never commit `data/raw/` or `data/processed/` (they're generated).
 - `Customer_Clip` (street addresses, life-support flags) is never committed and never read by any code.
-- The LLM never computes probabilities or times. It calls tools and explains.
+- The LLM never computes or writes customer-facing outage facts. It selects an answer category and may call one validated what-if tool; Python renders exact engine results.
 - Every customer-facing string passes through `core/privacy.scrub_text`. The LLM receives only allowlisted derived fields.
 - Restoration is always a range labeled as a model estimate. `confirmed_etr` comes only from the (simulated) utility status.
 - Declared needs are opt-in checkboxes only; we never infer them.

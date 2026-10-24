@@ -36,6 +36,7 @@ export default function App() {
 
   // Only declared needs and channel TYPES are sent; no names, phone numbers, or addresses.
   const profile = { declared_needs: needs, alerts_enrolled: enrolled, channels: enrolled ? ["sms"] : [], language: lang };
+  const utilityStatus = utilityConfirmed ? { outage_confirmed: true, confirmed_etr: t.demoEtr } : null;
 
   // Once on load: find out whether we're on synthetic data (shows the banner).
   useEffect(() => { getHealth().then(setHealth).catch(() => {}); }, []);
@@ -71,7 +72,7 @@ export default function App() {
       getConcierge({
         premise_id: premise, scenario, profile,
         previous_range_text: prev.range, previous_scenario: prev.scenario,
-        utility_status: utilityConfirmed ? { outage_confirmed: true, confirmed_etr: t.demoEtr } : null,
+        utility_status: utilityStatus,
       }).then((r) => {
         setChanges(diff(prev.result, r));
         setResult(r); setError(null);
@@ -147,7 +148,7 @@ export default function App() {
           notifyRequest={{ premise_id: premise, scenario, profile,
                            previous_range_text: shownPrev.current.range, previous_scenario: shownPrev.current.scenario }} />}
 
-        <ChatPanel t={t} premiseId={premise} scenario={scenario} profile={profile} />
+        <ChatPanel t={t} premiseId={premise} scenario={scenario} profile={profile} utilityStatus={utilityStatus} />
       </main>
 
       {view === "console" && <main className="view"><Console /></main>}
