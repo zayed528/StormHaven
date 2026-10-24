@@ -120,6 +120,15 @@ Tests: `backend/tests/test_console.py` **skip** until the router is registered, 
 
 The 52 facilities are reprojected from the compound CRS and matched to the nearest transformer within 500 m: **41 matched** (4/5 hospitals, 30/37 fire, 7/10 ambulance). Only the transformer IDs are written (`priority_nodes.csv`); names, addresses and coordinates are dropped inside the script. They raise restoration priority and are never shown.
 
+### QA: map-layer privacy review (`/api/map` → `map_layers.py`)
+
+Audited the live `/api/map?severity=97` response against the real network. **Clean on all three requirements; no fix needed.**
+
+- **No facility locations.** A text scan of the full 5.7 MB payload finds none of: hospital, fire, ambulance, medic, critical, address, road_name, owner, customer, premise_nu, phone, email, "life support". Critical facilities raise restoration priority inside the backend only; nothing about them reaches the browser.
+- **One dot per transformer, not per home.** The response returns **25,300 points = exactly the transformers that have coordinates** (25,302 transformers total; 2 have no coordinate). That is far fewer than the 117,599 homes. Each point's `id` is a representative premise behind that transformer (every `id` is a premise node; 0 device IDs leak), and the point sits at the **transformer's** rounded coordinate, not the home's — spot-checked: point lat == transformer lat. So no home-level location is ever emitted.
+- **No internal-only fields.** Premise points carry only `{id, lat, lon, circuit_id, n, p, band}`; circuits carry only `{circuit_id, lat, lon}`. No equipment IDs, no raw `fail_prob`, no operational columns. Coordinates are rounded to **4 decimals (~11 m)**, confirmed on the live payload.
+- `circuit_id` is present (e.g. `0000027`) — this is an anonymized GIS circuit code, not a customer identifier, and the map needs it to color/select circuits. Acceptable for a customer-facing map; flagged here for completeness.
+
 ## Labor workbook: `Install_Labor_HackOHIO.xlsx` → `04_load_labor.py`
 
 Five sheets. **It is not a per-damage-type table.** It has hours per compatible unit (CU), one indirect multiplier, and per-job adders.
