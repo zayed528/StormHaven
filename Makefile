@@ -26,3 +26,4 @@ pipelines:        ## full data build; each step needs the previous step's output
 	$(PY) pipelines/04_load_labor.py
 	$(PY) pipelines/05_train_and_backtest.py
 	$(PY) pipelines/06_export_map_layers.py
+	$(PY) pipelines/07_weather.py

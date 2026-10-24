@@ -73,7 +73,8 @@ class ConciergeRequest(BaseModel):
     circuit_id: Optional[str] = None
     scenario: StormScenario = StormScenario()
     profile: CustomerProfile = CustomerProfile()
-    previous_range_text: Optional[str] = None   # last ETR shown -> drives "estimate updated" message
+    previous_range_text: Optional[str] = None   # restoration.range_short from the last answer shown
+    previous_scenario: Optional[StormScenario] = None   # scenario behind that answer -> "Reason:" in the update SMS
     utility_status: Optional[SimulatedUtilityStatus] = None   # None = no utility info yet
 
 
@@ -130,6 +131,7 @@ class RestorationResponse(BaseModel):
     p50_hours: float                  # best guess
     p90_hours: float                  # pessimistic end
     range_text: str                   # customer-facing sentence built from the three numbers
+    range_short: str = ""             # SMS-length range in the customer's language, e.g. "6-24 hours"
     steps: list[RestorationStep]
     drivers: list[Driver]
     trust: TrustInfo
@@ -183,3 +185,4 @@ class ConciergeResponse(BaseModel):
     guidance: GuidanceResponse
     alerts: AlertsResponse
     audit_id: str
+    map_point_id: Optional[str] = None   # the map dot that represents this location (already public on the map)

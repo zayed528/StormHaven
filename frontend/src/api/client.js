@@ -9,4 +9,5 @@ export const getMap = (severity) => fetch(`/api/map?severity=${severity}`).then(
   if (!r.ok) throw new Error(`/api/map failed: ${r.status}`); return r.json();
 });
 export const getConcierge = (req) => post("/api/concierge", req);
+export const getWeather = () => fetch("/api/weather").then((r) => r.json());
 export const sendChat = (req) => post("/api/chat", req);

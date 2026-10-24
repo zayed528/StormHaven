@@ -16,7 +16,7 @@ import numpy as np
 
 from app.config import DATA_PROCESSED
 from app.core.data_loader import get_store
-from app.core.topology import upline_path
+from app.core.topology import map_point_for, upline_path
 from app.engines.risk import _base_prob, band_for, severity_multiplier
 
 _COORD_DECIMALS = 5          # ~1 m; plenty for drawing lines, roughly halves the payload
@@ -62,14 +62,15 @@ def _points() -> tuple[list[dict], np.ndarray]:
     for n, d in g.nodes(data=True):
         if d["kind"] != "transformer" or d.get("lat") != d.get("lat"):   # NaN coords -> can't draw
             continue
-        homes = sorted(c for c in g.successors(n) if g.nodes[c]["kind"] == "premise")
-        if not homes:
+        rep = map_point_for(store, n)
+        if rep is None:
             continue
-        path = upline_path(store, homes[0])
+        n_homes = sum(1 for c in g.successors(n) if g.nodes[c]["kind"] == "premise")
+        path = upline_path(store, rep)
         base = np.clip([_base_prob(g.nodes[x]) for x in path], 0, 0.999)
         hazard.append(float(-np.log1p(-base).sum()))
-        pts.append({"id": homes[0], "lat": round(d["lat"], 4), "lon": round(d["lon"], 4),
-                    "circuit_id": d["circuit_id"], "n": len(homes)})
+        pts.append({"id": rep, "lat": round(d["lat"], 4), "lon": round(d["lon"], 4),
+                    "circuit_id": d["circuit_id"], "n": n_homes})
     return pts, np.array(hazard)
 
 

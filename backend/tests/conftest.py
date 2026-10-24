@@ -4,3 +4,4 @@ Real-data checks live in test_real_data.py and are skipped when data/processed i
 import os
 
 os.environ.setdefault("STORMHAVEN_DATA", "synthetic")
+os.environ.setdefault("STORMHAVEN_OFFLINE", "1")        # no live weather calls from tests

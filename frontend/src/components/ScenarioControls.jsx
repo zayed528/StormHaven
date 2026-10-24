@@ -14,8 +14,19 @@ const DAMAGE = [
   ["broken_pole", "Broken pole"], ["transformer_failed", "Transformer failed"],
 ];
 
+// The real past storm closest to a severity percentile, so the slider reads as weather people remember.
+function similarStorm(pct, storms) {
+  if (!storms.length) return null;
+  if (pct < storms[0].percentile - 5) return "Milder than any storm that caused notable damage in our records.";
+  const s = storms.reduce((a, b) => (Math.abs(b.percentile - pct) < Math.abs(a.percentile - pct) ? b : a));
+  const extra = [s.rain_mm >= 1 ? `${Math.round(s.rain_mm)} mm rain` : null, s.snow_cm >= 1 ? `${Math.round(s.snow_cm)} cm snow` : null]
+    .filter(Boolean).join(", ");
+  return `Similar to the ${s.label} storm: gusts up to ${Math.round(s.peak_gust_mph)} mph${extra ? `, ${extra}` : ""}.`;
+}
+
 export default function ScenarioControls({ scenario, onScenario, needs, onToggleNeed, enrolled, onEnrolled,
-  utilityConfirmed, onUtilityConfirmed }) {
+  utilityConfirmed, onUtilityConfirmed, referenceStorms = [] }) {
+  const similar = similarStorm(scenario.severity_percentile, referenceStorms);
   // Returns an onChange handler that updates one scenario field (sliders need Number(), selects don't).
   const set = (k, num = false) => (e) => onScenario({ ...scenario, [k]: num ? Number(e.target.value) : e.target.value });
   // The UI offers one reported damage item; the API accepts a list.
@@ -27,7 +38,8 @@ export default function ScenarioControls({ scenario, onScenario, needs, onToggle
   return (
     <section className="controls" aria-label="Storm scenario">
       <label>Storm strength vs. past storms: <strong>{scenario.severity_percentile}th percentile</strong>
-        <input type="range" min="0" max="100" value={scenario.severity_percentile} onChange={set("severity_percentile", true)} /></label>
+        <input type="range" min="0" max="100" value={scenario.severity_percentile} onChange={set("severity_percentile", true)} />
+        {similar && <span className="muted">{similar}</span>}</label>
       <label>Crews available: <strong>{scenario.crews_available}</strong>
         <input type="range" min="2" max="80" value={scenario.crews_available} onChange={set("crews_available", true)} /></label>
       <label>Road access

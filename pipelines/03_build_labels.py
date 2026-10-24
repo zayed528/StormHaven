@@ -98,6 +98,7 @@ day = pd.to_datetime(dmg[A["reported"]]).dt.normalize()
 days = pd.Series(sorted(day.unique()))
 event_of_day = dict(zip(days, (days.diff().dt.days.fillna(np.inf) > CFG["event_gap_days"]).cumsum()))
 dmg["event_id"] = day.map(event_of_day).map(lambda e: f"E{e:03d}")
+dmg["report_day"] = day.dt.strftime("%Y-%m-%d")
 
 # 3) Attribute every record to a node in our graph
 dev = nodes[(nodes.kind != "premise") & nodes.lat.notna()]
@@ -185,7 +186,7 @@ n_prem = int((nodes.kind == "premise").sum())
 share_out = (labels.groupby("event_id").size() / n_prem).reindex(sizes.index).fillna(0)
 
 # 9) Attributed records (QA + backtest) and durations (day resolution; unrepaired records excluded)
-att[["event_id", "node_id", "kind", "damage_type", "method", "dist_m", A["asset"], A["access"]]] \
+att[["event_id", "report_day", "node_id", "kind", "damage_type", "method", "dist_m", A["asset"], A["access"]]] \
     .rename(columns={A["asset"]: "asset_type", A["access"]: "access_issue"}) \
     .to_csv(OUT / "damage_attributed.csv", index=False)
 rep = att[att[A["repaired_flag"]] == "Yes"].copy()
@@ -199,6 +200,8 @@ meta = {
     "median_event_records": med,
     "severity_curve": [[round(float(p), 3), round(float(m), 4)] for p, m in curve.items()],
     "event_sizes": {e: int(s) for e, s in sizes.items()},
+    "events": {e: {"start": g.report_day.min(), "end": g.report_day.max(), "records": int(len(g))}
+               for e, g in att.groupby("event_id")},
     "event_share_premises_out": {e: round(float(s), 4) for e, s in share_out.items()},
     "damage_type_shares": shares,
     "kind_priors": fit,

@@ -119,7 +119,7 @@ def _fmt(h: float) -> str:
 
 
 def estimate_restoration(store: DataStore, pr: PathRisk, sc: StormScenario,
-                         risk_confidence: str) -> RestorationResponse:
+                         risk_confidence: str, outage_confirmed: bool = False) -> RestorationResponse:
     """Public entry point (called by service.py). Reuses the PathRisk from the risk engine so both
     engines reason about the same path and the same storm-adjusted failure probabilities."""
     # Fallback: location not matched -> say so plainly, never return made-up numbers.
@@ -184,7 +184,10 @@ def estimate_restoration(store: DataStore, pr: PathRisk, sc: StormScenario,
 
     return RestorationResponse(
         p10_hours=round(float(p10), 1), p50_hours=round(float(p50), 1), p90_hours=round(float(p90), 1),
-        range_text=f"If you lose power, most likely {_fmt(p10)} to {_fmt(p90)} (best guess about {_fmt(p50)}).",
+        # Before an outage it's conditional ("if you lose power"); once the utility confirms one it isn't.
+        range_text=(f"Our estimate: power back in about {_fmt(p10)} to {_fmt(p90)} (best guess about {_fmt(p50)}). "
+                    "This is a model estimate, not a confirmed restoration time." if outage_confirmed else
+                    f"If you lose power, most likely {_fmt(p10)} to {_fmt(p90)} (best guess about {_fmt(p50)})."),
         steps=steps, drivers=drivers,
         trust=TrustInfo(
             confidence=risk_confidence,       # restoration inherits the risk engine's confidence (same path data)

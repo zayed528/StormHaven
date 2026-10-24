@@ -34,7 +34,8 @@ _PHONE = re.compile(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b")
 _EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.]+\b")
 
 # Response fields that are machine identifiers, not customer text: left untouched.
-_NOT_TEXT = {"audit_id", "name", "source", "band", "confidence", "phase", "channel", "resolved_level"}
+_NOT_TEXT = {"audit_id", "map_point_id", "name", "source", "band", "confidence", "phase", "channel",
+             "resolved_level"}
 
 M = TypeVar("M", bound=BaseModel)
 

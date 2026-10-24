@@ -164,6 +164,9 @@ def assess_risk(store: DataStore, premise_id, circuit_id, scenario: StormScenari
         ), pr
 
     conf, missing = _confidence(store, pr, scenario)
+    # Backtest (pipelines/05): on real data, predictions of 80%+ came true only about half the time.
+    if not store.is_synthetic and pr.probability >= 0.8:
+        missing.append("Our very high estimates have run high in past storms: read this as 'likely', not 'certain'.")
     # Every answer carries its trust info: confidence, assumptions, missing data, what could change it.
     resp = RiskResponse(
         probability=round(pr.probability, 3), band=band_for(pr.probability),

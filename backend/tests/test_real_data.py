@@ -68,3 +68,24 @@ def test_unknown_premise_falls_back(real):
     store, _ = real
     risk, rest = _answer(store, "000000000", 80)
     assert risk.source == "fallback" and rest.source == "fallback"
+
+
+def test_very_high_estimates_carry_the_backtest_caveat(real):
+    store, prem = real
+    for pid in prem[::37]:
+        risk, _ = _answer(store, pid, 99)
+        if risk.probability >= 0.8:
+            assert any("run high" in m for m in risk.trust.missing_data)
+            return
+    pytest.skip("no Very High premise in the sample")
+
+
+def test_weather_reference_is_consistent():
+    path = DATA_PROCESSED / "weather_reference.json"
+    if not path.exists():
+        pytest.skip("pipelines/07_weather.py not run")
+    ref = json.loads(path.read_text())
+    pcts = [s["percentile"] for s in ref["reference_storms"]]
+    assert pcts == sorted(pcts) and all(0 < p < 100 for p in pcts)
+    shares = [r["share_with_damage"] for r in ref["damage_odds_by_gust"]]
+    assert shares == sorted(shares)                     # windier days -> damage more often

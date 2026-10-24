@@ -43,7 +43,7 @@ Anyone may add tests to `backend/tests/` for their own module. `.github/CODEOWNE
 | **3–8** | As soon as Jaid's `nodes_base.csv` + ARCOS land: per-device `fail_prob` with empirical-Bayes smoothing in 03 (already sketched; tune the prior). Event severity distribution → `severity_k` fit. Calibrate `base_backlog_hours_per_crew` and `assessment_hours` against `durations.csv`. Keep the synthetic tests green. |
 | **8–9** (all) | Integration checkpoint: one real premise end-to-end (see below). |
 | **9–14** | `05_train_and_backtest.py`: leave-one-event-out calibration (Brier score + reliability table) and restoration P10–P90 coverage (fill the `coverage` TODO). ML v1 (logistic on path features: hist rate, path length, asset mix) **only if** it beats v0 on held-out events; hook it into `risk.py` behind the TODO, with the same response shape. |
-| **14–18** separators | **Estimate-updated message diff** (with Abby): use the input that actually changed, not the top hypothetical driver (TODO in `alerts.py`; coordinate with Nandan). Backtest numbers into slides. **Nap h15:30–17:00.** |
+| **14–18** separators | ✅ Estimate-updated message now uses the input that actually changed. ✅ Weather pipeline (07) and `/api/weather` done; see ASSUMPTIONS → Weather. Now: backtest + weather numbers into slides. **Nap h15:30–17:00.** |
 | **18–20** | Red-team the math: severity 0/100, crews 1/500, every damage type at once, an unknown damage type. Check monotonicity (more crews ⇒ never slower). Fix bugs only. |
 | **20** | 🧊 Feature freeze. |
 | **20–24** | Own the slides and the 5-minute pitch. Rehearse with the demo driver ×3. Prepare Q&A answers for the 4 known simplifications in ASSUMPTIONS.md. |
@@ -97,10 +97,10 @@ Anyone may add tests to `backend/tests/` for their own module. `.github/CODEOWNE
 |---|---|
 | **0–1** (all) | Schema freeze: confirm the frontend needs nothing more from `ConciergeResponse`. |
 | **1–3** | Tasks 1–3. Accessibility basics: labels, focus order, contrast, keyboard-only pass. |
-| **3–8** | Guidance library curation (sources, reading level 6th–8th grade). EN/ES message templates (ES needs the band and reason text translated too; today they come from the engines in English). ChatPanel: suggested-question chips, loading state. Clear fallback and error states. Loading skeletons. |
+| **3–8** | Guidance library curation (sources, reading level 6th–8th grade). EN/ES message templates (✅ all inserted words are now localized via `words:` in the template file; needs a native-speaker review). ChatPanel: suggested-question chips, loading state. Clear fallback and error states. Loading skeletons. |
 | **8–9** (all) | Integration checkpoint (you drive the UI side). |
 | **9–14** | ResultsPanel polish: a "what changed" highlight when a slider moves, better band/confidence visual, mobile layout. Quick usability test with someone outside the team. |
-| **14–18** separators | **Spanish toggle** (`profile.language`), **step timeline** visual (`StepTimeline.jsx`: P10–P90 band, your-power-returns marker), message diff UI with Akshat. **Nap h15:30–17:00.** |
+| **14–18** separators | **Spanish toggle** (`profile.language`), **step timeline** visual (`StepTimeline.jsx`: P10–P90 band, your-power-returns marker), UI for the weather card (`WeatherCard.jsx`, basic version done). **Nap h15:30–17:00.** |
 | **18–20** | Accessibility audit (screen reader, keyboard), copy red-team (plain language, no false precision, safety labels). |
 | **20** | 🧊 Feature freeze. |
 | **20–24** | Final demo script, slide design, rehearsal ×3 with Akshat. |

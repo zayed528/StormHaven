@@ -10,6 +10,8 @@
 /pipelines/04_load_labor.py            @AKSHAT_GH
 /pipelines/05_train_and_backtest.py    @AKSHAT_GH
 /pipelines/_rates.py                   @AKSHAT_GH
+/pipelines/07_weather.py               @AKSHAT_GH
+/backend/app/weather.py                @NANDAN_GH @AKSHAT_GH
 /docs/ASSUMPTIONS.md                   @AKSHAT_GH
 
 # --- Jaid: data + geospatial ---

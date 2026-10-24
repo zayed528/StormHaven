@@ -5,17 +5,20 @@ Documented, deterministic rules (see config/assumptions.yaml -> alerts).
 Messages come from templates; optional LLM polish happens in app/ai, then is re-scrubbed.
 """
 from __future__ import annotations
+import math
 from functools import lru_cache
 import yaml
 
 from app.config import ASSUMPTIONS, CONTENT_DIR
 from app.core.privacy import scrub_text
 from app.schemas import (AlertsResponse, Channel, CustomerProfile, Escalation, RestorationResponse,
-                         RiskResponse, ScheduledAlert)
+                         RiskResponse, ScheduledAlert, StormScenario)
 
 CFG = ASSUMPTIONS["alerts"]
 # Band order for threshold checks; Unknown (fallback) counts as Moderate so we lean toward alerting.
 BAND_RANK = {"Low": 0, "Moderate": 1, "High": 2, "Very High": 3, "Unknown": 1}
+ACCESS_RANK = {"normal": 0, "limited": 1, "blocked": 2}
+MESSAGE_KEYS = ["pre_storm", "outage_confirmed", "estimate_updated", "restoration_complete"]
 
 
 @lru_cache(maxsize=1)
@@ -24,18 +27,46 @@ def _templates() -> dict:
     return yaml.safe_load((CONTENT_DIR / "message_templates.yaml").read_text())
 
 
-def _short_range(rest: RestorationResponse) -> str:
-    """SMS-length range: P10-P90 in hours, or in days once P90 reaches 48 h. Never a single time."""
+def short_range(rest: RestorationResponse, language: str = "en") -> str:
+    """SMS-length range in the customer's language: "6-24 hours", "20 hours to 3 days", "2-4 days".
+    Never a single time. The low end rounds down and the high end rounds up, so the range never shrinks."""
+    w = _templates()[language]["words"]
     if rest.source == "fallback":
-        return "unknown for now"
+        return w["unknown"]
     lo, hi = rest.p10_hours, rest.p90_hours
-    return f"{lo/24:.0f}-{hi/24:.0f} days" if hi >= 48 else f"{lo:.0f}-{hi:.0f} hours"
+    if hi < 48:
+        return f"{max(0, math.floor(lo))}-{max(1, math.ceil(hi))} {w['hours']}"
+    if lo < 24:
+        return f"{math.floor(lo)} {w['hours']} {w['to']} {math.ceil(hi / 24)} {w['days']}"
+    return f"{math.floor(lo / 24)}-{math.ceil(hi / 24)} {w['days']}"
+
+
+def _change_reason(now: StormScenario, before: StormScenario | None, words: dict) -> str:
+    """Plain-language reason for an estimate change, from what actually differs between the two scenarios."""
+    r = words["reasons"]
+    if before is None:
+        return r["default"]
+    out = []
+    if now.severity_percentile != before.severity_percentile:
+        out.append(r["storm_stronger"] if now.severity_percentile > before.severity_percentile else r["storm_weaker"])
+    if now.crews_available != before.crews_available:
+        out.append(r["more_crews"] if now.crews_available > before.crews_available else r["fewer_crews"])
+    if now.road_access != before.road_access:
+        worse = ACCESS_RANK[now.road_access.value] > ACCESS_RANK[before.road_access.value]
+        out.append(r["roads_worse"] if worse else r["roads_better"])
+    qty_now = sum(d.quantity for d in now.extra_damage)
+    qty_before = sum(d.quantity for d in before.extra_damage)
+    if qty_now != qty_before or {d.damage_type for d in now.extra_damage} != {d.damage_type for d in before.extra_damage}:
+        out.append(r["new_damage"] if qty_now >= qty_before else r["damage_cleared"])
+    return f" {words['and']} ".join(out[:2]) if out else r["default"]
 
 
 def build_alerts(risk: RiskResponse, rest: RestorationResponse, profile: CustomerProfile,
-                 previous_range_text: str | None = None) -> AlertsResponse:
+                 previous_range_text: str | None = None, scenario: StormScenario | None = None,
+                 previous_scenario: StormScenario | None = None) -> AlertsResponse:
     """Public entry point (called by service.py): eligibility, schedule, escalations, and filled messages.
-    previous_range_text = the range the customer saw last time; drives the 'estimate updated' message."""
+    previous_range_text / previous_scenario = what the customer saw last time; they drive the
+    'estimate updated' message (old -> new range, and a reason taken from what actually changed)."""
     reasons, needs = [], {n.value for n in profile.declared_needs}
     priority_need = bool(needs & {"medical_device", "critical_facility"})
     # Each check can be switched off in assumptions.yaml (e.g. require_enrollment: false -> everyone counts).
@@ -86,14 +117,18 @@ def build_alerts(risk: RiskResponse, rest: RestorationResponse, profile: Custome
     ]
 
     # Fill every template in the customer's language, scrub it, and hard-cap it at SMS length.
-    t = _templates()[profile.language]
-    fill = {"band": risk.band, "range_short": _short_range(rest),
-            "old_range": previous_range_text or _short_range(rest),
-            # TODO (Nandan/Abby, hour 14-18): use the actual input that changed, not the top hypothetical driver
-            "reason": (rest.drivers[0].plain_language if rest.drivers else "updated field conditions").rstrip(".")}
+    lang = _templates()[profile.language]
+    words, tpl = lang["words"], lang["messages"]
+    now_range = short_range(rest, profile.language)
+    changed = bool(previous_range_text) and previous_range_text != now_range
+    fill = {"band": words["bands"].get(risk.band, risk.band), "range_short": now_range,
+            "old_range": previous_range_text or now_range,
+            "reason": _change_reason(scenario, previous_scenario, words) if scenario else words["reasons"]["default"],
+            "threshold": f"{CFG['timing']['estimate_update_threshold_hours']:g}"}
     messages = {}
-    for k, tpl in t.items():
-        msg = scrub_text(tpl.format(**fill))
-        messages[k] = msg[: CFG["sms_max_chars"]]
+    for k in MESSAGE_KEYS:
+        # No earlier estimate (or no change): never send "changed from X to X"; preview the standing promise.
+        key = "estimate_unchanged" if k == "estimate_updated" and not changed else k
+        messages[k] = scrub_text(tpl[key].format(**fill))[: CFG["sms_max_chars"]]
     return AlertsResponse(eligible=eligible, rule_applied=rule, reasons=reasons,
                           schedule=schedule, escalations=escalations, messages=messages)

@@ -36,10 +36,30 @@ On the synthetic network (no `meta.json`), step 5 uses *m(s) = exp(k·(s − 50)
 | `risk.confidence.medium_min_events` | 2 | same, for **Medium**. Low = this circuit was damaged in at most 1 recorded storm | assumed, set from data | 8/3 (the old values) put 52% of customers at Low, triggering the human-callback escalation for half the territory |
 | (code) extreme storm | *s* > 95 or < 5 → confidence drops one level, with "Only a few past storms were this severe…" | only ~2 storms above the 95th percentile | assumed | — |
 | (code) circuit-level match | circuit, not premise → confidence drops one level | the answer is for a representative premise | assumed | — |
+| (code) Very High caveat | real data and P(out) ≥ 0.8 → "Our very high estimates have run high in past storms: read this as 'likely', not 'certain'." | the backtest's ≥ 80% bin came true ~48% of the time | from backtest | — |
 
 **Storm severity percentile *s*** is a scenario input, not a live forecast. It is the storm's rank among the 36 recorded ARCOS storms, so the 99th percentile ≈ the Feb 2025 storm. Because most recorded "storms" are tiny, everything below about the 90th percentile looks calm; the UI defaults to 97. Whether to rank only among major storms is a team decision.
 
 **ARCOS attribution parameters** (in `03_build_labels.py`): own-device match within 100 m (fuse, transformer) or 150 m (recloser); line, pole and secondary damage → nearest transformer within 1,000 m (the largest observed distance is about 740 m). Light and capacitor-bank records are dropped as non-interrupting.
+
+## Weather (Open-Meteo history, `pipelines/07_weather.py`): context, not a model input
+
+We pulled daily weather for the whole ARCOS period on ~10 km cells over the service area (26 cells × 1,432 days) and tested it honestly:
+
+| question | result | decision |
+|---|---|---|
+| Does wind predict **whether** damage happens? | Yes. Damage was reported within 2 days after **6%** of days with median-cell gusts < 30 mph, **14%** at 30–40 mph, and **31%** at ≥ 40 mph. | Shown in the forecast card ("on past days this windy…") |
+| Does weather predict **how much** damage (storm size)? | Barely. A leave-one-storm-out Poisson model on gusts has mean log error 0.82 vs 0.99 for "a typical storm". Adding rain or snow makes it worse (overfitting with 36 storms). It predicts ~10–20 records for Feb 2025 (actual 1,244), whose worst days followed a snow/ice event rather than the windiest day. | **Weather does not set severity.** The slider stays a storm-size percentile. |
+| Within a storm, do windier areas get more damage? | Mixed: rank correlation 0.46 across cells in Feb 2025, 0.16 in Sep 2024, −0.08 in Jan 2025. | Not used yet. Candidate improvement once there's more than 3 large storms of evidence. |
+
+What the app does with weather: (1) labels the severity slider with the closest real storm ("Similar to the Sep 2024 storm: gusts up to 56 mph, 94 mm rain"); (2) shows the live 3-day forecast and active NWS warnings for the area, with the historical damage odds for that much wind. Neither changes a risk or restoration number.
+
+| setting (in `07_weather.py`) | value | meaning |
+|---|---|---|
+| cell size | 0.1° (~10 km) | about the resolution of the weather model |
+| `REFERENCE_MIN_RECORDS` | 10 | storms used to label the slider (10 storms) |
+| `REPORT_LAG_DAYS` | 2 | ARCOS reports trail the weather by up to ~2 days |
+| `GUST_BINS` | < 30, 30–40, ≥ 40 mph | coarse on purpose: only 70 days had ≥ 40 mph median-cell gusts |
 
 ## Restoration: "How long could it take?"
 
@@ -47,7 +67,7 @@ Model: Monte Carlo (`n_simulations` draws) over damage on the premise's upline p
 For each damaged device: **clock hours = (qty × labor_hours[type] + access_adder) × indirect_multiplier ÷ crew_size × access_multiplier × lognormal noise**, where qty is 1–2.
 **Queue wait** = storm-wide backlog × (1 − the device's priority percentile) ÷ crews × access_multiplier. Priority = customers restored, plus a bonus if the device feeds a critical facility. This is step restoration: main-line repairs go first.
 **Storm-wide backlog** (real data) = expected damage records in a storm this size (median records × undamped m(s)) × average person-hours per record (AEP labor × the ARCOS damage-type mix) × indirect multiplier ÷ crew size. On the synthetic network it is `base_backlog_hours_per_crew` × `default_crews` × m(s).
-**Restore time** = assessment hours + the maximum over damaged devices of (wait + labor). We report P10, P50 and P90, plus drivers: the change in P50 with 50% more crews, with blocked roads, and with a storm 20 percentiles stronger.
+**Restore time** = assessment hours + the maximum over damaged devices of (wait + labor). We report P10, P50 and P90, plus drivers: the change in P50 with 50% more crews, with blocked roads, and with a storm 20 percentiles stronger. Before an outage the range is phrased "If you lose power…"; once the (simulated) utility feed confirms an outage it becomes "Our estimate: power back in…" and stays labeled as a model estimate.
 
 | key | value | meaning | source | how we validate |
 |---|---|---|---|---|

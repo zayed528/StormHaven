@@ -24,7 +24,7 @@ Each step names the minimum-viable-demo (MVD) step it proves. The judges' rule "
 
 ### 3. Explore scenarios → restoration range (MVD 3) ~60 s, **judges' interaction**
 - Read the range: "If you lose power, most likely X to Y hours. **A range, not a promise**."
-- Drag **storm strength** from 97 to 99 ("about as bad as the February 2025 storm") → the map reddens, and the band and range move.
+- Drag **storm strength** from 97 to 99 → the label under the slider changes to "Similar to the Feb 2025 storm: gusts up to 63 mph…", the map reddens, and the band and range move. Say: "The scale is our own storm history, labeled with the real weather of each storm."
 - Set **road access → Blocked** → range widens; the driver text explains why.
 - Set **Damage reported → Broken pole** → range jumps. "Pole replacement hours come from AEP's labor sheet, plus travel and setup time."
 - Point at the **step timeline**: the main line is fixed first, so ETAs never go backwards. That's step restoration.
@@ -35,10 +35,12 @@ Each step names the minimum-viable-demo (MVD) step it proves. The judges' rule "
 - Tick **Powered medical equipment** (opt-in, never inferred) → medical battery and backup-plan items appear, a medical **Safety** item appears, and "**We'll follow up personally**" shows the human callback escalation.
 - Read **Alerts**: eligible because she's enrolled and has a channel. Point at the rule text.
 
+*(Optional, if real weather is happening on demo day: point at the live forecast card and any NWS warning. "This is today's real forecast for the area. It's context; you choose the scenario.")*
+
 ### 5. Proactive communication (MVD 5) ~40 s
 - Show the **Before the storm** message.
 - Tick **Demo only → Simulate: the utility confirms an outage**. The **Confirmed by AEP** column fills, labeled as utility data, still separate from **Our estimate**.
-- Change crews → **Estimate updated** message shows old → new range.
+- Change crews → **Estimate updated** message shows old → new range *and the real reason* ("fewer repair crews are available").
 - *(If SNS is live)* Nandan sends the pre-storm text; the phone buzzes.
 
 ### 6. Trust: privacy, safety, uncertainty, limits (MVD 6) ~50 s

@@ -1,13 +1,55 @@
 # StormHaven alert templates. Owner: Abby.  {placeholders} filled by engines/alerts.py.
 # Keep under the SMS limit (alerts.sms_max_chars). Every message is passed through privacy.scrub_text.
 # LLM may optionally polish, then text is re-checked + scrubbed. TODO (Abby): native-speaker review of ES.
+#
+# messages: the four alert types, plus `estimate_unchanged`, which fills the "estimate_updated" slot when there is
+#           no earlier estimate to compare against (so we never send "changed from X to X").
+# words:    everything the engine inserts into a message, so a Spanish SMS contains no English.
 en:
-  pre_storm: "StormHaven storm alert: A storm is expected in your area. Your outage risk is {band}. If you lose power, restoration could take {range_short} (estimate). Charge devices and review your plan. Reply STOP to opt out."
-  outage_confirmed: "StormHaven: AEP knows your power is out. Current estimate: {range_short}. This is an estimate and may change. Stay away from downed lines and call 911 if you see one."
-  estimate_updated: "StormHaven update: Your restoration estimate changed from {old_range} to {range_short}. Reason: {reason}. We'll keep you posted."
-  restoration_complete: "StormHaven: Power should now be restored at your location. Still out? Reply OUT or report it to AEP online so we can check."
+  messages:
+    pre_storm: "StormHaven storm alert: A storm is expected in your area. Your outage risk is {band}. If you lose power, restoration could take {range_short} (estimate). Charge devices and review your plan. Reply STOP to opt out."
+    outage_confirmed: "StormHaven: AEP knows your power is out. Current estimate: {range_short}. This is an estimate and may change. Stay away from downed lines and call 911 if you see one."
+    estimate_updated: "StormHaven update: Your restoration estimate changed from {old_range} to {range_short}. Reason: {reason}. We'll keep you posted."
+    estimate_unchanged: "StormHaven: Your current restoration estimate is {range_short}. We'll text you if it changes by more than {threshold} hour."
+    restoration_complete: "StormHaven: Power should now be restored at your location. Still out? Reply OUT or report it to AEP online so we can check."
+  words:
+    hours: hours
+    days: days
+    to: to
+    and: and
+    unknown: unknown for now
+    bands: {Low: Low, Moderate: Moderate, High: High, Very High: Very High, Unknown: Unknown}
+    reasons:
+      storm_stronger: the storm forecast got stronger
+      storm_weaker: the storm forecast eased
+      more_crews: more repair crews are available
+      fewer_crews: fewer repair crews are available
+      roads_worse: road access got worse
+      roads_better: road access improved
+      new_damage: crews reported new damage on your line
+      damage_cleared: reported damage on your line was updated
+      default: updated field conditions
 es:
-  pre_storm: "Alerta de StormHaven: Se espera una tormenta en su zona. Su riesgo de apagón es {band}. Si pierde la electricidad, la restauración podría tardar {range_short} (estimación). Cargue sus dispositivos. Responda STOP para cancelar."
-  outage_confirmed: "StormHaven: AEP sabe que no tiene electricidad. Estimación actual: {range_short}. Puede cambiar. Aléjese de cables caídos y llame al 911 si ve uno."
-  estimate_updated: "StormHaven: Su estimación cambió de {old_range} a {range_short}. Motivo: {reason}. Le mantendremos informado."
-  restoration_complete: "StormHaven: La electricidad debería estar restablecida. ¿Sigue sin luz? Responda OUT o repórtelo a AEP en línea."
+  messages:
+    pre_storm: "Alerta de StormHaven: Se espera una tormenta en su zona. Su riesgo de apagón es {band}. Si pierde la electricidad, la restauración podría tardar {range_short} (estimación). Cargue sus dispositivos. Responda STOP para cancelar."
+    outage_confirmed: "StormHaven: AEP sabe que no tiene electricidad. Estimación actual: {range_short}. Puede cambiar. Aléjese de cables caídos y llame al 911 si ve uno."
+    estimate_updated: "StormHaven: Su estimación cambió de {old_range} a {range_short}. Motivo: {reason}. Le mantendremos informado."
+    estimate_unchanged: "StormHaven: Su estimación actual de restauración es {range_short}. Le avisaremos si cambia más de {threshold} hora."
+    restoration_complete: "StormHaven: La electricidad debería estar restablecida. ¿Sigue sin luz? Responda OUT o repórtelo a AEP en línea."
+  words:
+    hours: horas
+    days: días
+    to: a
+    and: "y"
+    unknown: aún desconocido
+    bands: {Low: bajo, Moderate: moderado, High: alto, Very High: muy alto, Unknown: desconocido}
+    reasons:
+      storm_stronger: el pronóstico de la tormenta empeoró
+      storm_weaker: el pronóstico de la tormenta mejoró
+      more_crews: hay más cuadrillas de reparación disponibles
+      fewer_crews: hay menos cuadrillas de reparación disponibles
+      roads_worse: el acceso por carretera empeoró
+      roads_better: el acceso por carretera mejoró
+      new_damage: se reportaron nuevos daños en su línea
+      damage_cleared: se actualizaron los daños reportados en su línea
+      default: condiciones actualizadas en campo

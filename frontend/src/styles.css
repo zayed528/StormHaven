@@ -46,3 +46,9 @@ figure { margin: .5rem 0 0; } figcaption { font-size: .8rem; font-weight: 600; c
 .locate { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .locate input { padding: .4rem; font: inherit; }
 .locate button { padding: .4rem .9rem; font: inherit; }
+.weather { background: #fff; border: 1px solid var(--line); padding: .75rem 1rem; }
+.weather h2 { font-size: 1.05rem; margin: 0 0 .4rem; }
+.weather .days { list-style: none; padding: 0; margin: .25rem 0; display: flex; flex-wrap: wrap; gap: .4rem 1.5rem; }
+.weather .nws { border-left: 6px solid var(--alert); background: #FBECEE; padding: .5rem .75rem; margin-bottom: .5rem; }
+.weather .nws ul { margin: .25rem 0 0; }
+.credit { font-size: .75rem; color: var(--muted); margin: .4rem 0 0; }

@@ -22,6 +22,14 @@ def upline_path(store: DataStore, node_id: str) -> list[str]:
     return path
 
 
+def map_point_for(store: DataStore, transformer_id: str) -> str | None:
+    """The premise ID used as a transformer's map dot: the lowest-sorting premise it serves.
+    map_layers.py draws exactly these, and the concierge reports it so the UI can ring the right dot."""
+    g = store.graph
+    homes = sorted(c for c in g.successors(transformer_id) if g.nodes[c]["kind"] == "premise")
+    return homes[0] if homes else None
+
+
 def premises_on_circuit(store: DataStore, circuit_id: str) -> list[str]:
     """All premise node IDs whose circuit_id matches. Linear scan: fine at hackathon scale."""
     g = store.graph

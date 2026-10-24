@@ -127,3 +127,46 @@ def test_chat_offline_and_emergency_preamble(monkeypatch):
 def test_map_endpoint():
     m = client.get("/api/map?severity=70").json()
     assert m["premises"] and m["circuits"]
+
+
+# "Estimate updated": never "changed from X to X"; the reason names what actually changed.
+def test_estimate_update_message_uses_real_change():
+    prof = CustomerProfile(alerts_enrolled=True, channels=["sms"])
+    first = run_concierge(ConciergeRequest(premise_id=CKT3, profile=prof))
+    assert "changed from" not in first.alerts.messages["estimate_updated"]
+    before = StormScenario()
+    after = StormScenario(crews_available=3)
+    second = run_concierge(ConciergeRequest(premise_id=CKT3, profile=prof, scenario=after, previous_scenario=before,
+                                            previous_range_text=first.restoration.range_short))
+    msg = second.alerts.messages["estimate_updated"]
+    assert first.restoration.range_short in msg and second.restoration.range_short in msg
+    assert "fewer repair crews" in msg
+
+
+# Spanish SMS contain no English risk words or range words.
+def test_spanish_messages_are_localized():
+    prof = CustomerProfile(alerts_enrolled=True, channels=["sms"], language="es")
+    r = run_concierge(ConciergeRequest(premise_id=CKT3, scenario=StormScenario(severity_percentile=90), profile=prof))
+    text = " ".join(r.alerts.messages.values())
+    assert "hours" not in text and "days" not in text
+    assert not any(b in r.alerts.messages["pre_storm"] for b in ("Low", "Moderate", "High"))
+
+
+# Once the utility confirms an outage, the range is no longer phrased "if you lose power".
+def test_confirmed_outage_changes_range_wording():
+    conf = run_concierge(ConciergeRequest(premise_id=CKT3, utility_status=SimulatedUtilityStatus(outage_confirmed=True)))
+    assert conf.restoration.range_text.startswith("Our estimate: power back")
+    assert "model estimate" in conf.restoration.range_text
+
+
+# The concierge reports which map dot represents the location, and that dot is on the map.
+def test_map_point_id_is_a_map_dot():
+    r = run_concierge(ConciergeRequest(premise_id="P-31112"))      # not the first home on its transformer
+    ids = {p["id"] for p in client.get("/api/map?severity=50").json()["premises"]}
+    assert r.map_point_id in ids
+
+
+# Weather endpoint degrades gracefully: synthetic network -> no reference, no live calls.
+def test_weather_endpoint_offline_synthetic():
+    w = client.get("/api/weather").json()
+    assert w["reference_storms"] == [] and w["forecast"]["available"] is False and "Open-Meteo" in w["credit"]

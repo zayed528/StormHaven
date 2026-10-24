@@ -18,6 +18,7 @@ from app.map_layers import map_layers                           # noqa: E402
 from app.schemas import (ConciergeRequest, ConciergeResponse,   # noqa: E402
                          CustomerProfile, StormScenario)
 from app.service import run_concierge                           # noqa: E402
+from app.weather import weather_context                         # noqa: E402
 
 app = FastAPI(title="StormHaven API", version="0.1.0")
 # Open CORS so a separately hosted frontend (Amplify) can call the API. Tighten to the real origin at deploy.
@@ -48,6 +49,13 @@ def get_map(severity: float = 50):
 
 # Chat request lives here (not schemas.py) because only this endpoint uses it.
 # history uses the Bedrock Converse shape: [{"role": "user"|"assistant", "content": [{"text": "..."}]}]
+@app.get("/api/weather")
+def get_weather():
+    """Weather context: reference storms (slider labels), damage odds by wind, live 3-day forecast + NWS alerts.
+    Context only: weather never changes a risk or restoration number."""
+    return weather_context()
+
+
 class ChatRequest(BaseModel):
     history: list[dict]
     premise_id: str | None = None

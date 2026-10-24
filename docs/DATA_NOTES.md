@@ -57,6 +57,18 @@ Columns: `Outage_Num, Incident_W, Event, Region, District, Crew_Area, Substation
 
 Outputs: `nodes.csv` (adds `fail_prob` and `n_events_observed`), `damage_mix.json`, `meta.json` (storm sizes, severity curve, damage shares, per-kind priors), `premise_event_labels.csv` (**positives only**), `damage_attributed.csv`, `durations.csv`. The method is explained in `docs/ASSUMPTIONS.md`.
 
+## Open data: weather (`07_weather.py`, `backend/app/weather.py`)
+
+| source | endpoint | used for | access |
+|---|---|---|---|
+| Open-Meteo Historical | `archive-api.open-meteo.com/v1/archive` | daily max gust, precipitation and snowfall per ~10 km cell over the ARCOS period → `weather_daily.csv`, `weather_events.csv`, `weather_reference.json` | no key; CC BY 4.0, credit "Weather data by Open-Meteo.com" |
+| Open-Meteo Forecast | `api.open-meteo.com/v1/forecast` | live 3-day forecast in the UI | no key |
+| National Weather Service | `api.weather.gov/alerts/active?point=…` | active warnings for the service area | no key; send a User-Agent |
+
+- Raw API responses are cached in `data/processed/weather_cache/` (git-ignored). The first run of 07 takes ~6 minutes because requests are paced under Open-Meteo's per-minute limit; re-runs are instant.
+- Only the coarse cell centres (means of transformer locations within each 0.1° cell) are sent to these services. No AEP IDs are sent.
+- Findings and how weather is used: `docs/ASSUMPTIONS.md` → Weather.
+
 ## Priority facilities → `06_export_map_layers.py`
 
 The 52 facilities are reprojected from the compound CRS and matched to the nearest transformer within 500 m: **41 matched** (4/5 hospitals, 30/37 fire, 7/10 ambulance). Only the transformer IDs are written (`priority_nodes.csv`); names, addresses and coordinates are dropped inside the script. They raise restoration priority and are never shown.

@@ -45,12 +45,14 @@ pipelines/
   04_load_labor.py             AEP labor workbook -> labor hours, multiplier, adders Akshat
   05_train_and_backtest.py     calibration + restoration-range coverage              Akshat
   06_export_map_layers.py      circuits GeoJSON, priority facilities -> device IDs   Jaid
+  07_weather.py                Open-Meteo history -> storm weather + slider labels   Akshat
   _rates.py                    damage-rate estimator shared by 03 and 05             Akshat
 backend/app/
-  main.py                      /api/health, /api/concierge, /api/map, /api/chat     Nandan
+  main.py                      /api/health, /api/concierge, /api/map, /api/weather, /api/chat  Nandan
   schemas.py                   API contract (frozen at hour 1)                       shared
   service.py                   runs the 4 engines in order + audit + final scrub     shared
   map_layers.py                Plotly-ready circuit lines + premise points           Jaid
+  weather.py                   /api/weather: reference storms, live forecast + NWS   Nandan
   engines/risk.py              1. Will I lose power?                                 Akshat
   engines/restoration.py       2. How long? Monte Carlo + step restoration           Akshat + Jaid
   engines/guidance.py          3. What should I do? rules + curated library          Abby
