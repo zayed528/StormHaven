@@ -146,6 +146,32 @@ def test_valid_decision_renders_exact_engine_fields_not_model_prose(monkeypatch)
     assert "not currently eligible" in response.json()["reply"]
 
 
+def test_declared_needs_are_available_to_chat_and_use_preparation_path(monkeypatch):
+    fake = FakeBedrock(_decision("preparation"))
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(
+        _question("What should I do about my refrigerated medication?"),
+        scenario={
+            "severity_percentile": 99,
+            "crews_available": 20,
+            "road_access": "normal",
+            "extra_damage": [],
+        },
+        profile={
+            "declared_needs": ["refrigerated_medication"],
+            "alerts_enrolled": False,
+            "channels": [],
+            "language": "en",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "cooler and ice" in response.json()["reply"].lower()
+    outlook = fake.calls[0]["system"][1]["text"]
+    assert '"declared_needs":["refrigerated_medication"]' in outlook
+
+
 def test_explicit_challenge_question_cannot_be_misrouted_to_generic_overview(monkeypatch):
     fake = FakeBedrock(_decision("overview"))
     _enable_bedrock(monkeypatch, fake)
