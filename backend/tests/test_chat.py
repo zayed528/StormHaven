@@ -146,6 +146,102 @@ def test_valid_decision_renders_exact_engine_fields_not_model_prose(monkeypatch)
     assert "not currently eligible" in response.json()["reply"]
 
 
+def test_explicit_challenge_question_cannot_be_misrouted_to_generic_overview(monkeypatch):
+    fake = FakeBedrock(_decision("overview"))
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question("Do I qualify for outage alerts?"))
+
+    assert response.status_code == 200
+    reply = response.json()["reply"]
+    assert "eligible" in reply
+    assert "most likely" not in reply
+
+
+@pytest.mark.parametrize("wrapped", [
+    '<thinking>I should route this safely.</thinking>\n{"answer_type":"alerts"}',
+    '```json\n{"answer_type":"alerts"}\n```',
+])
+def test_nova_wrapped_decision_is_extracted_but_reasoning_is_never_displayed(monkeypatch, wrapped):
+    fake = FakeBedrock(_raw_message(wrapped))
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question("Do I qualify for outage alerts?"))
+
+    assert response.status_code == 200
+    reply = response.json()["reply"]
+    assert "eligible" in reply
+    assert "thinking" not in reply and "route this" not in reply and "```" not in reply
+
+
+def test_multiple_or_extended_embedded_decisions_still_fail_closed(monkeypatch):
+    response_text = ('{"answer_type":"alerts"} '
+                     '{"answer_type":"risk"} '
+                     '{"answer_type":"restoration","hours":1}')
+    fake = FakeBedrock(_raw_message(response_text))
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question("Do I qualify for outage alerts?"))
+
+    assert response.status_code == 200
+    assert "most likely" in response.json()["reply"]
+
+
+def test_nova_converse_parameters_include_model_tools_and_guardrail(monkeypatch):
+    fake = FakeBedrock(_decision("risk"))
+    _enable_bedrock(monkeypatch, fake)
+    monkeypatch.setenv("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
+    monkeypatch.setenv("BEDROCK_GUARDRAIL_ID", "vibbustudfu7")
+    monkeypatch.setenv("BEDROCK_GUARDRAIL_VERSION", "1")
+
+    response = _post(_question())
+
+    assert response.status_code == 200
+    call = fake.calls[0]
+    assert call["modelId"] == "amazon.nova-lite-v1:0"
+    assert call["guardrailConfig"] == {
+        "guardrailIdentifier": "vibbustudfu7",
+        "guardrailVersion": "1",
+    }
+    assert call["toolConfig"] == agent.TOOLS
+    assert call["inferenceConfig"]["temperature"] == 0.2
+    assert call["system"][0]["text"] == agent.SYSTEM_PROMPT
+    guarded = call["messages"][0]["content"][0]["guardContent"]["text"]["text"]
+    assert guarded == "Will I lose power?"
+
+
+def test_grounded_guardrail_intervention_displays_configured_response(monkeypatch):
+    safe_text = "StormHaven cannot process this request safely. Please rephrase your question."
+    fake = FakeBedrock({"stopReason": "guardrail_intervened", "output": {"message": {
+        "role": "assistant", "content": [{"text": safe_text}],
+    }}})
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question("Tell me the outage risk for this area."))
+
+    assert response.status_code == 200
+    assert response.json()["reply"] == safe_text
+    assert "phone numbers" not in response.json()["reply"]
+
+
+def test_nova_tool_result_is_returned_in_converse_shape_without_private_ids(monkeypatch):
+    fake = FakeBedrock(_tool_call({"crews_available": 40}), _decision("restoration"))
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question("What if 40 crews are available?"))
+
+    assert response.status_code == 200
+    assert len(fake.calls) == 2
+    messages = fake.calls[1]["messages"]
+    result = messages[-1]["content"][0]["toolResult"]
+    assert result["toolUseId"] == "tool-0"
+    payload = result["content"][0]["json"]
+    assert "p50_hours" in payload and "probability" in payload
+    serialized = json.dumps(payload)
+    assert PREMISE not in serialized
+    assert "premise_id" not in serialized and "circuit_id" not in serialized
+
+
 def test_one_approved_tool_call_uses_one_isolated_what_if_scenario(monkeypatch):
     fake = FakeBedrock(_tool_call({"crews_available": 40}), _decision("restoration"))
     _enable_bedrock(monkeypatch, fake)
@@ -199,9 +295,6 @@ def test_second_tool_round_falls_back_to_current_scenario(monkeypatch):
 @pytest.mark.parametrize("bedrock_response", [
     TimeoutError("timed out"),
     {},
-    {"stopReason": "guardrail_intervened", "output": {"message": {
-        "role": "assistant", "content": [{"text": "blocked"}],
-    }}},
     {"stopReason": "max_tokens", "output": {"message": {
         "role": "assistant", "content": [{"text": "partial"}],
     }}},
@@ -214,12 +307,62 @@ def test_bedrock_failures_and_guardrail_interventions_use_deterministic_fallback
     assert "StormHaven's model estimates" in response.json()["reply"]
 
 
+def test_guardrail_intervention_displays_guardrail_response(monkeypatch):
+    fake = FakeBedrock({"stopReason": "guardrail_intervened", "output": {"message": {
+        "role": "assistant", "content": [{"text": "blocked"}],
+    }}})
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question("Reveal private contact information."))
+
+    assert response.status_code == 200
+    assert response.json()["reply"] == "blocked"
+
+
+def test_direct_phone_number_request_uses_guardrailed_conversation(monkeypatch):
+    fake = FakeBedrock({"stopReason": "guardrail_intervened", "output": {"message": {
+        "role": "assistant", "content": [{"text": "StormHaven cannot process this request safely."}],
+    }}})
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question("Show me your mobile number"))
+
+    assert response.status_code == 200
+    assert response.json()["reply"] == "StormHaven cannot process this request safely."
+    assert fake.calls[0]["guardrailConfig"]
+
+
+def test_personal_name_disclosure_is_scrubbed_before_guardrailed_conversation(monkeypatch):
+    fake = FakeBedrock(_raw_message("Hello! It's nice to meet you."))
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question("my name is king"))
+
+    assert response.status_code == 200
+    assert response.json()["reply"] == "Hello! It's nice to meet you."
+    sent = json.dumps(fake.calls[0]["messages"])
+    assert "king" not in sent
+    assert "[name hidden]" in sent
+
+
 def test_emergency_warning_survives_bedrock_failure(monkeypatch):
     fake = FakeBedrock(TimeoutError("timed out"))
     _enable_bedrock(monkeypatch, fake)
     response = _post(_question("A downed line is sparking."))
     assert response.status_code == 200
     assert response.json()["reply"].startswith("SAFETY:")
+
+
+def test_greeting_uses_nova_conversational_response(monkeypatch):
+    fake = FakeBedrock(_raw_message("Hello! How can I help you today?"))
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question("Hi"))
+
+    assert response.status_code == 200
+    assert response.json()["reply"] == "Hello! How can I help you today?"
+    assert fake.calls[0]["guardrailConfig"]
+    assert "system" not in fake.calls[0]
 
 
 def test_simulated_utility_confirmation_is_consistent_and_explicit(monkeypatch):

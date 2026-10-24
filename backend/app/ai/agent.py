@@ -80,11 +80,17 @@ def chat(history: list[dict], premise_id: str | None, circuit_id: str | None,
     """history: [{"role": "user"|"assistant", "content": [{"text": "..."}]}, ...]
     The 911 message is prepended in code, not by the LLM, so it appears even if Bedrock is down or misbehaves."""
     emergency = _is_emergency(history)
+    safe_history = sanitize_chat_history(history)
+    if not emergency and not _is_outage_question(history):
+        try:
+            return _conversational_answer(safe_history, profile.language)
+        except Exception as exc:
+            logger.warning("Bedrock conversation fell back safely (%s)", type(exc).__name__)
+            return _conversation_fallback(profile.language)
     current = run_concierge(ConciergeRequest(premise_id=premise_id, circuit_id=circuit_id,
                                              scenario=base_scenario, profile=profile,
                                              utility_status=utility_status))
     data_mode = "synthetic" if get_store().is_synthetic else "real"
-    safe_history = sanitize_chat_history(history)
     current_payload = _flatten_for_llm(current, profile, data_mode)
     try:
         reply = _answer(safe_history, premise_id, circuit_id, base_scenario, profile,
@@ -93,6 +99,104 @@ def chat(history: list[dict], premise_id: str | None, circuit_id: str | None,
         logger.warning("Bedrock chat fell back safely (%s)", type(exc).__name__)
         reply = _offline_reply(current, data_mode)
     return f"{SAFETY_911}\n\n{reply}" if emergency else reply
+
+
+def _is_outage_question(history: list[dict]) -> bool:
+    """Keep outage facts on the grounded engine path; everything else is conversational."""
+    last_user = next((m for m in reversed(history) if m.get("role") == "user"), None)
+    text = " ".join(c.get("text", "") for c in (last_user or {}).get("content", [])
+                    if isinstance(c, dict)).lower()
+    terms = ("outage", "power", "electric", "risk", "restor", "crew", "storm", "road", "damage",
+             "prepare", "alert", "utility", "line", "wire", "transformer", "fuse", "recloser")
+    return any(term in text for term in terms)
+
+
+def _conversational_answer(history: list[dict], language: str) -> str:
+    """Use Nova like the Bedrock console for non-outage chat, with no added system prompt."""
+    client = get_client()
+    if client is None:
+        return _conversation_fallback(language)
+    kwargs = {
+        "modelId": os.environ["BEDROCK_MODEL_ID"],
+        "messages": history,
+        "inferenceConfig": {"maxTokens": 300, "temperature": 0.2},
+    }
+    if (gr := guardrail_config()):
+        kwargs["guardrailConfig"] = gr
+    out = client.converse(**kwargs)
+    stop_reason = out.get("stopReason")
+    if stop_reason not in {"end_turn", "stop_sequence", "guardrail_intervened"}:
+        raise ValueError("unsupported conversational stop reason")
+    msg = _validated_message(out)
+    text = "".join(c.get("text", "") for c in msg["content"] if isinstance(c, dict)).strip()
+    if not text:
+        return _privacy_refusal(language) if stop_reason == "guardrail_intervened" else _conversation_fallback(language)
+    return scrub_text(text)
+
+
+def _conversation_fallback(language: str) -> str:
+    if language == "es":
+        return "Puedo ayudar con el riesgo de apagón, la restauración, la preparación y las alertas."
+    return "I can help with outage risk, restoration, preparation, and alerts."
+
+
+def _small_talk_reply(history: list[dict], language: str) -> str | None:
+    """Handle simple social turns in code so a greeting never dumps a full outage forecast."""
+    last_user = next((m for m in reversed(history) if m.get("role") == "user"), None)
+    text = " ".join(c.get("text", "") for c in (last_user or {}).get("content", [])
+                    if isinstance(c, dict)).strip().lower()
+    greeting = re.fullmatch(r"(?:hi|hello|hey|good (?:morning|afternoon|evening)|hola|buenos d[ií]as)[!. ]*", text)
+    thanks = re.fullmatch(r"(?:thanks|thank you|gracias)[!. ]*", text)
+    help_request = re.fullmatch(r"(?:help|what can you do|how can you help)[?!. ]*", text)
+    if not (greeting or thanks or help_request):
+        return None
+    if language == "es":
+        if thanks:
+            return "Con gusto. Puedo explicar su riesgo de apagón, el tiempo de restauración, cómo prepararse y sus alertas."
+        return "¡Hola! Puedo explicar su riesgo de apagón, el tiempo de restauración, cómo prepararse y sus alertas."
+    if thanks:
+        return "You're welcome. I can explain your outage risk, restoration range, preparation steps, or alert eligibility."
+    return "Hi! I can explain your outage risk, restoration range, preparation steps, or alert eligibility."
+
+
+def _requests_private_contact(history: list[dict]) -> bool:
+    """Recognize direct requests for private phone/contact details before any model call."""
+    last_user = next((m for m in reversed(history) if m.get("role") == "user"), None)
+    text = " ".join(c.get("text", "") for c in (last_user or {}).get("content", [])
+                    if isinstance(c, dict)).strip().lower()
+    return bool(re.search(
+        r"\b(?:show|give|tell|share|provide|what(?:'s| is))\b.{0,30}"
+        r"\b(?:mobile|phone|telephone|contact)\b(?:\s+number)?",
+        text,
+    ))
+
+
+def _privacy_refusal(language: str) -> str:
+    if language == "es":
+        return ("No puedo proporcionar ni recopilar números de teléfono personales. StormHaven solo usa "
+                "si está inscrito y el tipo de canal de alerta que eligió.")
+    return ("I can't provide or collect personal phone numbers. StormHaven only uses whether you're enrolled "
+            "and the alert channel type you selected.")
+
+
+def _contains_personal_disclosure(history: list[dict]) -> bool:
+    """Catch explicit personal-data disclosures and respond without sending them to Bedrock."""
+    last_user = next((m for m in reversed(history) if m.get("role") == "user"), None)
+    text = " ".join(c.get("text", "") for c in (last_user or {}).get("content", [])
+                    if isinstance(c, dict)).strip()
+    return bool(re.search(
+        r"\b(?:my name is|i['’]?m called|my (?:phone|mobile|email|address|account number) is)\b",
+        text,
+        re.I,
+    ))
+
+
+def _privacy_notice(language: str) -> str:
+    if language == "es":
+        return ("Por su privacidad, no comparta nombres, direcciones, números de teléfono, números de cuenta ni "
+                "detalles médicos. Puede preguntarme sobre el riesgo, la restauración, la preparación o las alertas.")
+    return ("For your privacy, please don't share names, addresses, phone numbers, account numbers, or medical "
+            "details. You can ask me about outage risk, restoration, preparation, or alerts.")
 
 
 def _answer(history, premise_id, circuit_id, base_scenario, profile, utility_status,
@@ -115,10 +219,14 @@ def _answer(history, premise_id, circuit_id, base_scenario, profile, utility_sta
         kwargs["guardrailConfig"] = gr
 
     for _ in range(2):                                  # at most one tool request plus one final decision
-        out = client.converse(messages=messages, **kwargs)
+        # Scope input assessment to the sanitized customer question. Without guardContent,
+        # Bedrock evaluates every message block and can falsely block deterministic context.
+        out = client.converse(messages=_guarded_user_messages(messages), **kwargs)
         stop_reason = out.get("stopReason")
         if stop_reason == "guardrail_intervened":
-            return _offline_reply(current, data_mode)
+            msg = _validated_message(out)
+            guarded_text = "".join(c.get("text", "") for c in msg["content"] if isinstance(c, dict)).strip()
+            return scrub_text(guarded_text) if guarded_text else _conversation_fallback(profile.language)
         if stop_reason not in {"tool_use", "end_turn", "stop_sequence"}:
             return _offline_reply(current, data_mode)
         msg = _validated_message(out)
@@ -126,6 +234,10 @@ def _answer(history, premise_id, circuit_id, base_scenario, profile, utility_sta
         if stop_reason != "tool_use":                    # model is done -> parse intent, render facts in code
             text = "".join(c.get("text", "") for c in msg["content"] if isinstance(c, dict)).strip()
             answer_type = _parse_answer_type(text)
+            # Nova can occasionally return a valid but overly generic "overview" for an explicit
+            # challenge question. Keep obvious UI intents deterministic; the model still routes
+            # ambiguous questions and requests validated what-if calculations.
+            answer_type = _explicit_answer_type(history[-1]["content"][0]["text"]) or answer_type
             return _render_response(selected, data_mode, answer_type, what_if=(selected is not current))
         # Exactly one approved what-if is allowed. Multiple calls or another round fail closed.
         tool_blocks = [c["toolUse"] for c in msg["content"]
@@ -155,6 +267,20 @@ def _answer(history, premise_id, circuit_id, base_scenario, profile, utility_sta
         tool_used = True
     # Out of rounds: return the already-computed deterministic answer instead of a partial model answer.
     return _offline_reply(current, data_mode)
+
+
+def _guarded_user_messages(messages: list[dict]) -> list[dict]:
+    """Mark customer text as guard content while leaving tool results and engine context untouched."""
+    guarded = []
+    for message in messages:
+        content = []
+        for block in message.get("content", []):
+            if message.get("role") == "user" and isinstance(block, dict) and set(block) == {"text"}:
+                content.append({"guardContent": {"text": {"text": block["text"]}}})
+            else:
+                content.append(block)
+        guarded.append({**message, "content": content})
+    return guarded
 
 
 def _validated_message(out: dict) -> dict:
@@ -190,14 +316,38 @@ def _tool_args_match_question(args: dict, question: str) -> bool:
 
 
 def _parse_answer_type(text: str) -> str:
-    """Accept only a tiny JSON decision. Claude prose and claims are never shown to customers."""
-    decision = json.loads(text)
-    if not isinstance(decision, dict) or set(decision) != {"answer_type"}:
-        raise ValueError("Bedrock final response must contain only answer_type")
+    """Extract one tiny JSON decision; surrounding Nova reasoning is never displayed.
+
+    Nova Lite can wrap its requested JSON in a ``<thinking>`` block or a Markdown
+    fence even when instructed not to. Accepting exactly one allowlisted decision
+    remains safe because all other model text is discarded and Python renders the
+    customer-facing response from deterministic engine output.
+    """
+    pattern = r'\{\s*"answer_type"\s*:\s*"(?:overview|risk|restoration|why|preparation|alerts)"\s*\}'
+    matches = re.findall(pattern, text)
+    if len(matches) != 1:
+        raise ValueError("Bedrock final response must contain exactly one answer_type decision")
+    decision = json.loads(matches[0])
     answer_type = decision["answer_type"]
     if answer_type not in _ANSWER_TYPES:
         raise ValueError("unsupported answer type")
     return answer_type
+
+
+def _explicit_answer_type(question: str) -> str | None:
+    """Route only unmistakable challenge-question wording; leave ambiguous text to Nova."""
+    lower = question.lower()
+    if any(word in lower for word in ("alert", "eligible", "qualify")):
+        return "alerts"
+    if any(phrase in lower for phrase in ("how long", "restoration", "restore", "power return")):
+        return "restoration"
+    if any(word in lower for word in ("prepare", "preparation")) or "what should i do" in lower:
+        return "preparation"
+    if "why" in lower:
+        return "why"
+    if any(phrase in lower for phrase in ("lose power", "outage risk", "risk level")):
+        return "risk"
+    return None
 
 
 def _render_response(r, data_mode: str, answer_type: str = "overview", what_if: bool = False) -> str:

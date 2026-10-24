@@ -59,7 +59,10 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
 
   useEffect(() => {
     const el = logRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return undefined;
+    // Wait one frame so the newest bubble has its final wrapped height before scrolling.
+    const frame = requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+    return () => cancelAnimationFrame(frame);
   }, [history, busy, error, open]);
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
   useEffect(() => { if (premiseId) setNeedHome(false); }, [premiseId]);

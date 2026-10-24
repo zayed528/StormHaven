@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 _client = None     # created lazily on first use and then reused
+DEFAULT_AWS_REGION = "us-east-2"
 
 
 def get_client():
@@ -17,11 +18,17 @@ def get_client():
             read_timeout=float(os.getenv("BEDROCK_READ_TIMEOUT_SECONDS", "12")),
             retries={"max_attempts": int(os.getenv("BEDROCK_MAX_ATTEMPTS", "2")), "mode": "standard"},
         )
-        _client = boto3.client("bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-1"), config=config)
+        # Do not pass credentials here. Boto3 resolves them through the standard AWS
+        # provider chain (environment, shared config/SSO, container, or instance role).
+        region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or DEFAULT_AWS_REGION
+        _client = boto3.client("bedrock-runtime", region_name=region, config=config)
     return _client
 
 
 def guardrail_config() -> dict | None:
     """Bedrock Guardrail settings for converse(), or None if no guardrail is configured."""
-    gid = os.getenv("BEDROCK_GUARDRAIL_ID")
-    return {"guardrailIdentifier": gid, "guardrailVersion": os.getenv("BEDROCK_GUARDRAIL_VERSION", "DRAFT")} if gid else None
+    gid = os.getenv("BEDROCK_GUARDRAIL_ID", "").strip()
+    if not gid:
+        return None
+    version = os.getenv("BEDROCK_GUARDRAIL_VERSION", "1").strip() or "1"
+    return {"guardrailIdentifier": gid, "guardrailVersion": version}
