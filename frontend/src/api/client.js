@@ -11,3 +11,10 @@ export const getMap = (severity) => fetch(`/api/map?severity=${severity}`).then(
 export const getConcierge = (req) => post("/api/concierge", req);
 export const getWeather = () => fetch("/api/weather").then((r) => r.json());
 export const sendChat = (req) => post("/api/chat", req);
+
+// POST /api/notify (Jaid): {message_key, premise_id, scenario, profile} -> {sent, dry_run, text}.
+// Until the endpoint exists, start the dev server with VITE_MOCK_NOTIFY=1 to get a fake reply (nothing is sent).
+const MOCK_NOTIFY = import.meta.env.VITE_MOCK_NOTIFY === "1";
+export const sendNotify = (req) => (MOCK_NOTIFY
+  ? new Promise((ok) => setTimeout(() => ok({ sent: false, dry_run: true, mock: true, text: null }), 500))
+  : post("/api/notify", req));

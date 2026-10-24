@@ -1,4 +1,4 @@
-// Utility operator console: READ-ONLY dashboard for AEP staff.   Owner: Jaid
+// Utility operator console: READ-ONLY dashboard for AEP staff.   Owner: Abby (was Jaid)
 // Self-contained on purpose: its own fetch helpers and styles, so it never touches Abby's files.
 // Abby wires it in with ONE button in App.jsx:
 //     import Console from "./console/Console.jsx";
@@ -14,10 +14,15 @@ const get = (url) => fetch(url).then((r) => {
   return r.json();
 });
 
+// Same 4 storm levels as the customer view (ScenarioControls.jsx), so both screens talk about the same storm.
+const STORM_LEVELS = [[50, "Low risk"], [95, "Moderate risk"], [97, "High risk"], [99, "Extremely high risk"]];
+const BAND_ORDER = ["Very High", "High", "Moderate", "Low"];
+
 const BAND_COLOR = { Low: "#2E7D32", Moderate: "#E3B23C", High: "#E8743B", "Very High": "#A4243B", Unknown: "#5B6B7A" };
 
 export default function Console() {
-  const [severity, setSeverity] = useState(85);
+  const [level, setLevel] = useState(2);           // index into STORM_LEVELS (starts at High risk, like the customer view)
+  const severity = STORM_LEVELS[level][0];
   const [crews, setCrews] = useState(20);
   const [circuits, setCircuits] = useState(null);
   const [selected, setSelected] = useState(null);
@@ -28,8 +33,13 @@ export default function Console() {
 
   // Circuit list is static (doesn't depend on the scenario), so fetch it once.
   useEffect(() => { get("/api/console/circuits").then(setCircuits).catch((e) => setError(e.message)); }, []);
-  // Audit tail is independent of the scenario too.
-  useEffect(() => { get("/api/console/audit?limit=15").then(setAudit).catch(() => {}); }, []);
+  // Audit tail: refresh every 10 s so predictions made in the customer view show up without a reload.
+  useEffect(() => {
+    const load = () => get("/api/console/audit?limit=15").then(setAudit).catch(() => {});
+    load();
+    const timer = setInterval(load, 10000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Alert queue + escalations recompute when the scenario changes (debounced for slider drags).
   useEffect(() => {
@@ -51,8 +61,9 @@ export default function Console() {
       <header className="console-head">
         <h2>Operator console <span className="console-tag">read-only · model estimates</span></h2>
         <div className="console-knobs">
-          <label>Storm severity: {severity}
-            <input type="range" min="0" max="100" value={severity} onChange={(e) => setSeverity(+e.target.value)} />
+          <label>Storm level: <strong>{STORM_LEVELS[level][1]}</strong>
+            <input type="range" min="0" max={STORM_LEVELS.length - 1} step="1" value={level}
+              onChange={(e) => setLevel(+e.target.value)} aria-valuetext={STORM_LEVELS[level][1]} />
           </label>
           <label>Crews: {crews}
             <input type="range" min="1" max="200" value={crews} onChange={(e) => setCrews(+e.target.value)} />
@@ -67,13 +78,18 @@ export default function Console() {
         <article>
           <h3>Alert queue</h3>
           {!alerts ? <p className="console-muted">Loading…</p> : (<>
-            <p>{alerts.pre_storm_circuits} of {alerts.circuits_evaluated} circuits meet the pre-storm alert threshold.</p>
+            <p><strong>{alerts.homes_pre_storm.toLocaleString()}</strong> of {alerts.homes_total.toLocaleString()} homes
+              ({alerts.pre_storm_circuits} of {alerts.circuits_evaluated} circuits) get a pre-storm alert
+              (risk {alerts.pre_storm_threshold} or higher).</p>
+            <h4>Homes by risk band</h4>
             <ul className="console-bands">
-              {Object.entries(alerts.risk_band_counts).map(([band, n]) => (
-                <li key={band}><span className="dot" style={{ background: BAND_COLOR[band] ?? "#888" }} />{band}: {n}</li>
+              {BAND_ORDER.filter((b) => alerts.homes_by_band[b]).map((band) => (
+                <li key={band}><span className="dot" style={{ background: BAND_COLOR[band] ?? "#888" }} />
+                  {band}: {alerts.homes_by_band[band].toLocaleString()} homes
+                  <span className="console-muted"> · {alerts.risk_band_counts[band] ?? 0} circuits at worst</span></li>
               ))}
             </ul>
-            <h4>Active escalations</h4>
+            <h4>Active escalations <span className="console-muted">(circuits; medical = if a customer there declared one)</span></h4>
             {alerts.active_escalations.length === 0 ? <p className="console-muted">None under this scenario.</p> : (
               <ul>{alerts.active_escalations.map((e, i) => (
                 <li key={i}>{e.trigger} <strong>({e.circuits})</strong></li>))}</ul>)}
@@ -93,7 +109,8 @@ export default function Console() {
             </select>
           </label>
           {order && (<>
-            <p className="console-muted">{order.representative_range}</p>
+            <p className="console-muted">Typical home on this circuit: {Math.round(order.p10_hours)}–{Math.round(order.p90_hours)} h
+              (best guess {Math.round(order.p50_hours)} h). Showing the first {order.order.length} of {order.total_devices} devices.</p>
             <ol className="console-order">
               {order.order.map((o) => (
                 <li key={o.rank} className={o.feeds_critical ? "critical" : ""}>

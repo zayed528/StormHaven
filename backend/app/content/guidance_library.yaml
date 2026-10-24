@@ -1,35 +1,55 @@
-# StormHaven curated guidance (owner: Abby). The LLM may SELECT and REPHRASE these, never invent safety facts.
+# StormHaven curated guidance (owner: Nandan, was Abby). The LLM may SELECT and REPHRASE these, never invent safety facts.
 # Each item: text, phase, min_band (Low|Moderate|High|Very High), buckets (optional),
 # needs (optional: only shown if customer DECLARED that need), reason, source.
-# TEAM TODO (Abby): verify every item against the cited source page before demo.
+# Spanish: text_es / reason_es, used when profile.language == "es" (English is the fallback if one is missing).
+# TEAM TODO: verify every item against the cited source page before demo; native-speaker review of the _es lines.
 
 safety:
   - text: "Stay far away from downed power lines (at least 30 feet) and anything touching them. Assume every downed line is live. Call 911, then report it to AEP."
+    text_es: "Manténgase lejos de los cables eléctricos caídos (al menos a 30 pies) y de todo lo que los toque. Suponga que todo cable caído tiene corriente. Llame al 911 y luego repórtelo a AEP."
     phase: during
     source: "AEP / Ready.gov"
   - text: "Never run a generator, grill, or camp stove indoors or in a garage. Keep generators well away from windows, doors, and vents to avoid carbon monoxide poisoning."
+    text_es: "Nunca use un generador, una parrilla ni una estufa de campamento dentro de la casa o en un garaje. Mantenga los generadores lejos de ventanas, puertas y ventilaciones para evitar intoxicación por monóxido de carbono."
     phase: during
     source: "CDC"
   - text: "If you rely on electrically powered medical equipment and lose power, call 911 in an emergency — don't wait for restoration."
+    text_es: "Si depende de equipo médico eléctrico y se queda sin luz, llame al 911 en una emergencia; no espere a que vuelva la electricidad."
     phase: during
     needs: [medical_device]
     source: "Ready.gov"
 
 actions:
-  - {text: "Charge phones, laptops, and power banks now.", phase: before, min_band: Low, reason: "Keeps you reachable and able to get updates."}
-  - {text: "Sign up for outage alerts so you hear about restoration updates.", phase: before, min_band: Low, reason: "Updates reach you even if your power is out."}
-  - {text: "Keep flashlights and fresh batteries where you can find them in the dark. Avoid candles.", phase: before, min_band: Moderate, reason: "Your outage risk is elevated."}
-  - {text: "Keep the fridge and freezer closed. A closed fridge keeps food cold for about 4 hours; a full freezer for about 48 hours.", phase: during, min_band: Moderate, source: "USDA / FoodSafety.gov", reason: "Protects your food during an outage."}
-  - {text: "Store drinking water: about one gallon per person per day.", phase: before, min_band: High, buckets: [day, multi_day, extended], source: "Ready.gov", reason: "Your outage could last a day or more."}
-  - {text: "Fill your car's gas tank and get some cash in case card readers and pumps are down.", phase: before, min_band: High, buckets: [day, multi_day, extended], reason: "Longer outages can affect stores and gas stations."}
-  - {text: "Plan where you could go if the outage lasts several days, like a friend's home or a local warming or cooling center.", phase: before, min_band: High, buckets: [multi_day, extended], reason: "In the worst case, your outage could last more than a day."}
-  - {text: "Unplug sensitive electronics to protect them from surges when power returns.", phase: during, min_band: Moderate, reason: "Power can surge when it's restored."}
-  - {text: "Throw out refrigerated food that has been above 40°F for more than 2 hours. When in doubt, throw it out.", phase: after, min_band: Moderate, buckets: [day, multi_day, extended], source: "FoodSafety.gov", reason: "Your outage may outlast safe food storage."}
+  - {text: "Charge phones, laptops, and power banks now.", phase: before, min_band: Low, reason: "Keeps you reachable and able to get updates.",
+     text_es: "Cargue ahora sus teléfonos, computadoras portátiles y baterías externas.", reason_es: "Así podrá comunicarse y recibir actualizaciones."}
+  - {text: "Sign up for outage alerts so you hear about restoration updates.", phase: before, min_band: Low, reason: "Updates reach you even if your power is out.",
+     text_es: "Inscríbase en las alertas de apagones para enterarse de las actualizaciones de restauración.", reason_es: "Las actualizaciones le llegan aunque no tenga luz."}
+  - {text: "Keep flashlights and fresh batteries where you can find them in the dark. Avoid candles.", phase: before, min_band: Moderate, reason: "Your outage risk is elevated.",
+     text_es: "Tenga linternas y baterías nuevas donde pueda encontrarlas a oscuras. Evite las velas.", reason_es: "Su riesgo de apagón es elevado."}
+  - {text: "Keep the fridge and freezer closed. A closed fridge keeps food cold for about 4 hours; a full freezer for about 48 hours.", phase: during, min_band: Moderate, source: "USDA / FoodSafety.gov", reason: "Protects your food during an outage.",
+     text_es: "Mantenga cerrados el refrigerador y el congelador. Un refrigerador cerrado mantiene los alimentos fríos unas 4 horas; un congelador lleno, unas 48 horas.", reason_es: "Protege sus alimentos durante un apagón."}
+  - {text: "Store drinking water: about one gallon per person per day.", phase: before, min_band: High, buckets: [day, multi_day, extended], source: "Ready.gov", reason: "Your outage could last a day or more.",
+     text_es: "Guarde agua potable: alrededor de un galón por persona por día.", reason_es: "Su apagón podría durar un día o más."}
+  - {text: "Fill your car's gas tank and get some cash in case card readers and pumps are down.", phase: before, min_band: High, buckets: [day, multi_day, extended], reason: "Longer outages can affect stores and gas stations.",
+     text_es: "Llene el tanque de su auto y tenga algo de efectivo por si no funcionan los lectores de tarjetas ni las bombas de gasolina.", reason_es: "Los apagones largos pueden afectar a tiendas y gasolineras."}
+  - {text: "Plan where you could go if the outage lasts several days, like a friend's home or a local warming or cooling center.", phase: before, min_band: High, buckets: [multi_day, extended], reason: "In the worst case, your outage could last more than a day.",
+     text_es: "Planifique a dónde podría ir si el apagón dura varios días, como la casa de un amigo o un centro local para refugiarse del frío o del calor.", reason_es: "En el peor de los casos, su apagón podría durar más de un día."}
+  - {text: "Unplug sensitive electronics to protect them from surges when power returns.", phase: during, min_band: Moderate, reason: "Power can surge when it's restored.",
+     text_es: "Desconecte los aparatos electrónicos delicados para protegerlos de subidas de tensión cuando vuelva la electricidad.", reason_es: "Puede haber subidas de tensión cuando se restablece la electricidad."}
+  - {text: "Throw out refrigerated food that has been above 40°F for more than 2 hours. When in doubt, throw it out.", phase: after, min_band: Moderate, buckets: [day, multi_day, extended], source: "FoodSafety.gov", reason: "Your outage may outlast safe food storage.",
+     text_es: "Deseche los alimentos refrigerados que hayan estado a más de 40 °F por más de 2 horas. Si tiene dudas, deséchelos.", reason_es: "Su apagón podría durar más de lo que los alimentos se conservan con seguridad."}
   # ---- declared needs only ----
-  - {text: "Make sure backup batteries for your medical equipment are fully charged and know how long they last.", phase: before, min_band: Low, needs: [medical_device], reason: "You told us you use powered medical equipment."}
-  - {text: "If the estimated outage is longer than your battery backup, make a plan now to go somewhere with power.", phase: before, min_band: Moderate, needs: [medical_device], reason: "Your estimated outage may exceed battery life."}
-  - {text: "Have a cooler and ice ready for medications that need refrigeration. Ask your pharmacist how long they stay safe.", phase: before, min_band: Moderate, needs: [refrigerated_medication], reason: "You told us you have refrigerated medication."}
-  - {text: "Arrange for someone to check on you, and plan how you'd leave if elevators or powered doors stop working.", phase: before, min_band: Moderate, needs: [mobility], reason: "You told us mobility is a consideration."}
-  - {text: "Stock formula, bottled water for mixing, and a way to keep baby warm or cool.", phase: before, min_band: Moderate, needs: [infants], reason: "You told us there are infants at home."}
-  - {text: "Bring pets inside and have extra food and water for them.", phase: before, min_band: Moderate, needs: [pets], reason: "You told us you have pets."}
-  - {text: "Test backup generation and confirm your facility's emergency contact with AEP is current.", phase: before, min_band: Low, needs: [critical_facility], reason: "You identified as a critical facility."}
+  - {text: "Make sure backup batteries for your medical equipment are fully charged and know how long they last.", phase: before, min_band: Low, needs: [medical_device], reason: "You told us you use powered medical equipment.",
+     text_es: "Asegúrese de que las baterías de respaldo de su equipo médico estén completamente cargadas y sepa cuánto duran.", reason_es: "Nos dijo que usa equipo médico eléctrico."}
+  - {text: "If the estimated outage is longer than your battery backup, make a plan now to go somewhere with power.", phase: before, min_band: Moderate, needs: [medical_device], reason: "Your estimated outage may exceed battery life.",
+     text_es: "Si el apagón estimado dura más que su batería de respaldo, planifique ahora ir a un lugar con electricidad.", reason_es: "Su apagón estimado podría durar más que la batería."}
+  - {text: "Have a cooler and ice ready for medications that need refrigeration. Ask your pharmacist how long they stay safe.", phase: before, min_band: Moderate, needs: [refrigerated_medication], reason: "You told us you have refrigerated medication.",
+     text_es: "Tenga lista una hielera con hielo para los medicamentos que necesitan refrigeración. Pregunte a su farmacéutico cuánto tiempo se conservan.", reason_es: "Nos dijo que tiene medicamentos refrigerados."}
+  - {text: "Arrange for someone to check on you, and plan how you'd leave if elevators or powered doors stop working.", phase: before, min_band: Moderate, needs: [mobility], reason: "You told us mobility is a consideration.",
+     text_es: "Pida a alguien que esté pendiente de usted y planifique cómo saldría si dejan de funcionar los ascensores o las puertas eléctricas.", reason_es: "Nos dijo que tiene necesidades de movilidad."}
+  - {text: "Stock formula, bottled water for mixing, and a way to keep baby warm or cool.", phase: before, min_band: Moderate, needs: [infants], reason: "You told us there are infants at home.",
+     text_es: "Tenga fórmula, agua embotellada para prepararla y una forma de mantener al bebé abrigado o fresco.", reason_es: "Nos dijo que hay bebés en casa."}
+  - {text: "Bring pets inside and have extra food and water for them.", phase: before, min_band: Moderate, needs: [pets], reason: "You told us you have pets.",
+     text_es: "Meta a sus mascotas dentro de la casa y tenga comida y agua adicionales para ellas.", reason_es: "Nos dijo que tiene mascotas."}
+  - {text: "Test backup generation and confirm your facility's emergency contact with AEP is current.", phase: before, min_band: Low, needs: [critical_facility], reason: "You identified as a critical facility.",
+     text_es: "Pruebe su generación de respaldo y confirme que el contacto de emergencia de su instalación con AEP esté al día.", reason_es: "Se identificó como una instalación crítica."}

@@ -2,11 +2,10 @@
 // Data: restoration.steps = [{order, description, eta_hours, restores_your_power}], upstream first, ETA non-decreasing,
 // and p10/p50/p90 for the shaded "likely range" band. Everything here is a model estimate.   Owner: Nandan
 import React from "react";
+import { fmtHours } from "../i18n.js";
 
-// Hours -> short label. Switches to days at 48 h, like the backend's range text.
-const fmt = (h) => (h >= 48 ? `${(h / 24).toFixed(1)} days` : `${Math.round(h)} h`);
-
-export default function StepTimeline({ restoration }) {
+export default function StepTimeline({ t, restoration }) {
+  const fmt = (h) => fmtHours(h, t);
   const { steps, p10_hours: p10, p50_hours: p50, p90_hours: p90 } = restoration;
   if (!steps?.length) return null;
 
@@ -19,7 +18,7 @@ export default function StepTimeline({ restoration }) {
 
   return (
     <figure className="tl">
-      <figcaption>When repairs could happen, if you lose power</figcaption>
+      <figcaption>{t.tlCaption}</figcaption>
 
       {/* Chart: shaded likely range, dashed best guess, one row per repair step (numbered like the list). */}
       <div className="tl-plot" aria-hidden="true">
@@ -31,7 +30,7 @@ export default function StepTimeline({ restoration }) {
             {s.restores_your_power && (
               // Label sits right of the marker, or left of it when the marker is near the right edge.
               <span className={`tl-yours${pct(s.eta_hours) > 55 ? " flip" : ""}`} style={{ left: at(s.eta_hours) }}>
-                your power returns · ~{fmt(s.eta_hours)}</span>)}
+                {t.tlYours(fmt(s.eta_hours))}</span>)}
           </div>))}
       </div>
       <div className="tl-axis" aria-hidden="true">
@@ -41,17 +40,17 @@ export default function StepTimeline({ restoration }) {
           : <><span style={{ left: at(p10) }}>{fmt(p10)}</span><span style={{ left: at(p90) }}>{fmt(p90)}</span></>}
       </div>
       <p className="tl-legend muted" aria-hidden="true">
-        <span><i className="sw band" />Likely range</span>
-        <span><i className="sw p50" />Best guess ~{fmt(p50)}</span>
-        <span><i className="sw dot" />Repair step (numbered as below)</span>
+        <span><i className="sw range" />{t.tlRange}</span>
+        <span><i className="sw p50" />{t.tlBest(fmt(p50))}</span>
+        <span><i className="sw dot" />{t.tlStep}</span>
       </p>
 
       {/* Text version: same steps in order, upstream first. */}
-      <ol className="timeline" aria-label="Likely restoration order">
+      <ol className="timeline" aria-label={t.tlListAria}>
         {steps.map((s) => (
           <li key={s.order} className={s.restores_your_power ? "yours" : ""}>
-            <span className="eta">~{fmt(s.eta_hours)}</span> {s.description}
-            {s.restores_your_power && <strong> ← your power returns</strong>}
+            <span className="eta">~{fmt(s.eta_hours)}</span> {t.tr(s.description)}
+            {s.restores_your_power && <strong> {t.tlYoursList}</strong>}
           </li>))}
       </ol>
     </figure>

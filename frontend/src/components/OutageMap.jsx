@@ -11,8 +11,8 @@ const Plot = createPlotlyComponent(Plotly);
 // Risk band -> marker color. Also used by ResultsPanel for the band's left border.
 export const BAND_COLORS = { Low: "#4C9F70", Moderate: "#E3B23C", High: "#D9682B", "Very High": "#A4243B" };
 
-// Props: layers = GET /api/map response, selectedId = chosen premise, onSelect(id) = click handler.
-export default function OutageMap({ layers, selectedId, onSelect }) {
+// Props: layers = GET /api/map response, selectedId = chosen premise, onSelect(id) = click handler, t = UI text (i18n.js).
+export default function OutageMap({ t, layers, selectedId, onSelect }) {
   // Rebuild traces only when data or selection changes (Plotly redraws are expensive).
   const traces = useMemo(() => {
     if (!layers) return [];
@@ -21,15 +21,21 @@ export default function OutageMap({ layers, selectedId, onSelect }) {
       type: "scattermap", mode: "lines", lat: c.lat, lon: c.lon,
       line: { width: 2, color: "#5B6B7A" }, hoverinfo: "skip", showlegend: false,
     }));
-    // 2) Premises: one trace per band so the legend explains the colors
+    // 2a) Dark halo under every dot: scattermap markers have no outline option, and the yellow/green dots alone
+    //     are too faint against the light basemap (needs 3:1 contrast). Drawn first, so it sits underneath.
+    const halo = [{
+      type: "scattermap", mode: "markers", lat: layers.premises.map((p) => p.lat), lon: layers.premises.map((p) => p.lon),
+      marker: { size: 10, color: "#14213D" }, hoverinfo: "skip", showlegend: false,
+    }];
+    // 2b) Premises: one trace per band so the legend explains the colors
     const byBand = Object.keys(BAND_COLORS).map((band) => {
       const pts = layers.premises.filter((p) => p.band === band);
       return {
-        type: "scattermap", mode: "markers", name: band,
+        type: "scattermap", mode: "markers", name: t.bands[band],
         lat: pts.map((p) => p.lat), lon: pts.map((p) => p.lon),
         customdata: pts.map((p) => p.id),                    // click -> premise id
         // Each point is one transformer; n = homes it serves (no home-level locations are sent).
-        text: pts.map((p) => `${band} risk${p.n ? ` · ${p.n} home${p.n === 1 ? "" : "s"}` : ""}`),
+        text: pts.map((p) => t.mapHover(t.bands[band], p.n)),
         hovertemplate: "%{text}<extra></extra>",
         marker: { size: 7, color: BAND_COLORS[band] },
       };
@@ -40,8 +46,8 @@ export default function OutageMap({ layers, selectedId, onSelect }) {
       type: "scattermap", mode: "markers", lat: [sel.lat], lon: [sel.lon], hoverinfo: "skip",
       marker: { size: 22, color: "rgba(0,0,0,0)", line: { width: 3, color: "#14213D" } }, showlegend: false,
     }] : [];
-    return [...lines, ...byBand, ...ring];
-  }, [layers, selectedId]);
+    return [...lines, ...halo, ...byBand, ...ring];
+  }, [layers, selectedId, t]);
 
   // Fit the view to the data: center on the middle of the points' bounding box, zoom so it all fits.
   // (Synthetic demo network ~0.1 degrees wide -> zoom ~11; AEP service area ~0.6 degrees -> zoom ~8.)
@@ -64,7 +70,7 @@ export default function OutageMap({ layers, selectedId, onSelect }) {
       layout={{
         map: { style: "carto-positron", center: view.center, zoom: view.zoom },
         margin: { l: 0, r: 0, t: 0, b: 0 },
-        legend: { x: 0.01, y: 0.99, bgcolor: "rgba(255,255,255,0.85)", title: { text: "Outage risk" } },
+        legend: { x: 0.01, y: 0.99, bgcolor: "rgba(255,255,255,0.85)", title: { text: t.mapLegend } },
         uirevision: "keep",                                   // don't reset zoom on every update
       }}
       config={{ displayModeBar: false, scrollZoom: true, responsive: true }}

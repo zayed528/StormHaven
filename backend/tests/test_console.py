@@ -13,10 +13,10 @@ from app.service import run_concierge
 
 client = TestClient(app)
 
-# Skip the whole module if the router isn't wired yet (Nandan's one-line include in main.py).
-_routes = {r.path for r in app.routes}
+# Skip the whole module if the router isn't wired yet (the include_router line in main.py).
+# Asks the app itself: newer FastAPI wraps included routers, so app.routes no longer lists their paths.
 pytestmark = pytest.mark.skipif(
-    "/api/console/circuits" not in _routes,
+    client.get("/api/console/circuits").status_code == 404,
     reason="console router not registered in main.py yet (Nandan adds include_router)")
 
 

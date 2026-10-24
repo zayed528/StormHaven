@@ -1,5 +1,5 @@
 """
-Utility operator console: READ-ONLY situational awareness for AEP staff.   Owner: Jaid
+Utility operator console: READ-ONLY situational awareness for AEP staff.   Owner: Abby (was Jaid)
 
 This is the internal view, not the customer view. Operators legitimately need circuit IDs and equipment
 kinds, so those appear here; but it stays read-only and never exposes premise-level locations, customer
@@ -11,27 +11,36 @@ Endpoints (all GET, no side effects):
   GET /api/console/alerts?severity=&crews=         alert queue + active escalations under a storm scenario
   GET /api/console/audit?limit=                    tail of the prediction audit log (scrubbed)
 
-Nandan: add to main.py (one line, next to the other routers):
-    from app.console import router as console_router   # noqa: E402
-    app.include_router(console_router)
+Wired into main.py with app.include_router(console_router).
 """
 from __future__ import annotations
 
 import json
 from collections import Counter
+from functools import lru_cache
+
+import numpy as np
 
 from fastapi import APIRouter, HTTPException
 
 from app.config import LOG_DIR
 from app.core.data_loader import get_store
-from app.core.privacy import friendly_name, scrub_text
+from app.core.privacy import SHORT, scrub_text
 from app.core.topology import premises_on_circuit, resolve_location, upline_path
-from app.engines.alerts import build_alerts
+from app.engines.alerts import BAND_RANK, CFG as ALERT_CFG, build_alerts
 from app.engines.restoration import _priority_percentiles, estimate_restoration
-from app.engines.risk import assess_risk
+from app.engines.risk import assess_risk, band_for, severity_multiplier
+from app.map_layers import _points
 from app.schemas import AccessLevel, CustomerProfile, StormScenario
 
 router = APIRouter(prefix="/api/console", tags=["console"])
+
+
+@lru_cache(maxsize=None)
+def _typical_home(circuit_id: str) -> str | None:
+    """Median-depth premise on a circuit (topology only, so it never changes): cached, because finding it
+    walks every premise's path and the alert queue needs one per circuit on every slider move."""
+    return resolve_location(get_store(), None, circuit_id)[1]
 
 
 @router.get("/circuits")
@@ -59,10 +68,12 @@ def circuits():
 
 
 @router.get("/restoration/{circuit_id}")
-def restoration_order(circuit_id: str, severity: float = 70, crews: int = 20):
+def restoration_order(circuit_id: str, severity: float = 70, crews: int = 20, limit: int = 15):
     """Likely restoration order for a circuit: its protective devices ranked highest-priority-first
     (main-line devices that bring back the most customers come first), with a model ETA for a
-    representative premise. Model estimate only — never a confirmed restoration time."""
+    representative premise. Model estimate only — never a confirmed restoration time.
+    Only the first `limit` devices are listed (big circuits have hundreds of fuses); total_devices says how many."""
+    limit = max(1, min(limit, 100))
     store = get_store()
     if not premises_on_circuit(store, circuit_id):
         raise HTTPException(status_code=404, detail="Unknown circuit.")
@@ -79,17 +90,20 @@ def restoration_order(circuit_id: str, severity: float = 70, crews: int = 20):
     ranked = sorted(devs, key=lambda nd: prio.get(nd[0], 0.0), reverse=True)
     order = [{
         "rank": i + 1,
-        "equipment": friendly_name(d["kind"]),          # friendly label, never the raw device ID
+        # Operator label ("Fuse", "Automatic switch"), not the customer phrasing ("the fuse protecting your street").
+        "equipment": SHORT.get(d["kind"], d["kind"]).capitalize(),   # never the raw device ID
         "kind": d["kind"],
         "customers_restored": int(d.get("customers", 0)),
         "feeds_critical": bool(d.get("critical_downstream", False)),
-    } for i, (n, d) in enumerate(ranked)]
+    } for i, (n, d) in enumerate(ranked[:limit])]
     return {
         "circuit_id": circuit_id,
         "source": "model_estimate",
         "representative_range": rest.range_text,
+        "p10_hours": rest.p10_hours,
         "p50_hours": rest.p50_hours,
         "p90_hours": rest.p90_hours,
+        "total_devices": len(ranked),
         "order": order,
     }
 
@@ -97,39 +111,63 @@ def restoration_order(circuit_id: str, severity: float = 70, crews: int = 20):
 @router.get("/alerts")
 def alert_queue(severity: float = 70, crews: int = 20, road_access: AccessLevel = AccessLevel.normal):
     """Alert queue + active escalations under a storm scenario, aggregated across circuits.
-    Uses a representative premise per circuit and a default enrolled profile, so this is a what-if
-    overview of who would be alerted, not a record of real sends (those are logged by /api/notify)."""
+    A what-if overview of who would be alerted, not a record of real sends (those are logged by /api/notify).
+
+    Risk comes from EVERY neighborhood (transformer) on the circuit, with the same numbers the customer map
+    uses, so the console and the map always agree. A circuit's band = its riskiest neighborhood, and it is
+    in the pre-storm queue if any neighborhood reaches the alert threshold (alerts.eligibility.min_risk_band).
+    Escalations are checked for a typical home on each circuit: confidence as that home would see it, and
+    'medical need' = what WOULD trigger if a customer there had declared one (we never assume who has)."""
     store = get_store()
     g = store.graph
     sc = StormScenario(severity_percentile=severity, crews_available=crews, road_access=road_access)
-    # One enrolled customer per circuit, with a medical need declared, so escalation rules can light up.
-    profile = CustomerProfile(alerts_enrolled=True, channels=["sms"], declared_needs=["medical_device"])
-    circuits = sorted({d.get("circuit_id") for _, d in g.nodes(data=True)
-                       if d.get("circuit_id") and d.get("circuit_id") != "ALL"})
-    band_counts: Counter = Counter()
-    pre_storm = 0
+    threshold = BAND_RANK[ALERT_CFG["eligibility"]["min_risk_band"]]
+
+    # 1) Neighborhood risk at this severity: P(out) = 1 - exp(-m * H), exactly as map_layers computes it.
+    pts, hazard = _points()
+    p_out = 1 - np.exp(-severity_multiplier(severity, store) * hazard)
+    worst: dict[str, str] = {}                       # circuit -> riskiest neighborhood band
+    homes_by_band: Counter = Counter()
+    homes_pre_storm = 0
+    for pt, p in zip(pts, p_out):
+        band = band_for(float(p))
+        homes_by_band[band] += pt["n"]
+        homes_pre_storm += pt["n"] if BAND_RANK[band] >= threshold else 0
+        cid = pt["circuit_id"]
+        if cid not in worst or BAND_RANK[band] > BAND_RANK[worst[cid]]:
+            worst[cid] = band
+
+    # 2) Escalations for a typical home per circuit (premise-level, so confidence isn't marked down for
+    #    "we only matched your area"), with a medical need declared hypothetically.
+    medical = CustomerProfile(alerts_enrolled=True, channels=["sms"], declared_needs=["medical_device"])
     active_escalations: Counter = Counter()
     rows = []
+    circuits = sorted({d.get("circuit_id") for _, d in g.nodes(data=True)
+                       if d.get("circuit_id") and d.get("circuit_id") != "ALL"})
     for cid in circuits:
-        risk, pr = assess_risk(store, None, cid, sc)
+        home = _typical_home(cid)
+        risk, pr = assess_risk(store, home, None, sc)
         rest = estimate_restoration(store, pr, sc, risk.trust.confidence)
-        alerts = build_alerts(risk, rest, profile, previous_range_text=None)
-        band_counts[risk.band] += 1
-        would_pre_storm = any(s.trigger == "pre_storm" for s in alerts.schedule)
-        pre_storm += int(would_pre_storm)
-        for e in alerts.escalations:
-            if e.active:
-                active_escalations[scrub_text(e.trigger)] += 1
-        rows.append({"circuit_id": cid, "band": risk.band,
-                     "pre_storm_alert": would_pre_storm,
-                     "active_escalations": sum(1 for e in alerts.escalations if e.active)})
-    rows.sort(key=lambda r: (not r["pre_storm_alert"], r["circuit_id"]))
+        alerts = build_alerts(risk, rest, medical, previous_range_text=None)
+        on = [e for e in alerts.escalations if e.active]
+        for e in on:
+            active_escalations[scrub_text(e.trigger)] += 1
+        band = worst.get(cid, risk.band)
+        rows.append({"circuit_id": cid, "band": band,
+                     "pre_storm_alert": BAND_RANK.get(band, 1) >= threshold,
+                     "typical_p50_hours": rest.p50_hours,
+                     "active_escalations": len(on)})
+    rows.sort(key=lambda r: (not r["pre_storm_alert"], -BAND_RANK.get(r["band"], 1), r["circuit_id"]))
     return {
         "scenario": {"severity_percentile": severity, "crews_available": crews,
                      "road_access": road_access.value},
         "circuits_evaluated": len(circuits),
-        "pre_storm_circuits": pre_storm,
-        "risk_band_counts": dict(band_counts),
+        "pre_storm_circuits": sum(r["pre_storm_alert"] for r in rows),
+        "pre_storm_threshold": ALERT_CFG["eligibility"]["min_risk_band"],
+        "risk_band_counts": dict(Counter(r["band"] for r in rows)),   # circuits by their riskiest neighborhood
+        "homes_by_band": dict(homes_by_band),
+        "homes_total": sum(homes_by_band.values()),
+        "homes_pre_storm": homes_pre_storm,
         "active_escalations": [{"trigger": t, "circuits": c} for t, c in active_escalations.most_common()],
         "queue": rows,
     }

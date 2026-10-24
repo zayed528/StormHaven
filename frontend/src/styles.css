@@ -114,6 +114,61 @@ figure { margin: .5rem 0 0; } figcaption { font-size: .8rem; font-weight: 600; c
 .tl-axis span.start { transform: none; }
 .tl-legend { display: flex; flex-wrap: wrap; gap: .2rem 1rem; margin: .2rem 0 0; font-size: .8rem; }
 .sw { display: inline-block; vertical-align: middle; margin-right: .3rem; }
-.sw.band { width: 18px; height: 10px; background: #DCE6F2; border-radius: 2px; }
+.sw.range { width: 18px; height: 10px; background: #DCE6F2; border-radius: 2px; }
 .sw.p50 { width: 0; height: 12px; border-left: 2px dashed var(--ink); }
 .sw.dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--muted); }
+/* header: title + language switch */
+.header-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+/* language switch: both options side by side; the current one is filled navy with a check mark */
+.lang-switch { display: inline-flex; border: 1px solid var(--ink); border-radius: 999px; overflow: hidden; }
+.lang-switch button { padding: .4rem .95rem; font: inherit; border: none; background: #fff; color: var(--ink); cursor: pointer; }
+.lang-switch button + button { border-left: 1px solid var(--ink); }
+.lang-switch button:hover:not([aria-pressed="true"]) { background: #EEF3FF; }
+.lang-switch button[aria-pressed="true"] { background: var(--ink); color: #fff; font-weight: 700; cursor: default; }
+.lang-switch button:focus-visible { outline-offset: -4px; outline-color: #fff; box-shadow: 0 0 0 3px #1D4ED8; }
+.engine-note { margin: 0; font-style: italic; }
+/* screen-reader-only text (live "what changed" summary) */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* "what changed": the band / range line flashes yellow after an update and shows the old value */
+@keyframes changed-flash { from { background: #FFE9A8; } to { background: transparent; } }
+.changed { animation: changed-flash 2.5s ease-out; }
+.was { display: inline-block; margin-left: .4rem; font-size: .82rem; font-weight: 400; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .changed { animation: none; outline: 2px solid #E3B23C; outline-offset: 2px; } }
+/* "send this alert as a text" under each message */
+.send { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; margin-top: .35rem; }
+.send button { padding: .3rem .7rem; font: inherit; font-size: .85rem; cursor: pointer; }
+.send-status { font-size: .85rem; }
+.send-note { margin: .3rem 0 0; font-size: .82rem; }
+/* customer / console views (Task 5) */
+.view { display: grid; gap: 1rem; min-width: 0; }
+.view[hidden] { display: none; }                 /* display:grid above would otherwise beat the hidden attribute */
+.view-tabs { display: flex; gap: .4rem; margin: .6rem 0 .2rem; flex-wrap: wrap; }
+.view-tabs button { padding: .45rem 1rem; font: inherit; border: 1px solid var(--line); background: #fff; color: var(--ink);
+  border-radius: 6px; cursor: pointer; }
+.view-tabs button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; font-weight: 600; }
+/* accessibility (Task 8) */
+.skip-link { position: absolute; left: .5rem; top: -3rem; z-index: 2000; padding: .5rem .9rem; background: var(--ink);
+  color: #fff; border-radius: 4px; text-decoration: none; }
+.skip-link:focus { top: .5rem; }
+.results:focus { outline: none; }               /* focused by script after a keyboard lookup; no ring around the panel */
+input[type="range"] { accent-color: var(--ink); }
+/* phones (Task 7): one column, smaller map, finger-sized controls, nothing wider than the screen */
+@media (max-width: 600px) {
+  .app { padding: .75rem; gap: .75rem; }
+  header h1 { font-size: 1.4rem; }
+  .controls { grid-template-columns: 1fr; }
+  .controls fieldset { gap: .25rem 1rem; }
+  .map { height: 340px; }
+  .locate { flex-direction: column; align-items: stretch; }
+  .locate input, .locate button, .controls select, .lang-switch button, .view-tabs button, .send button,
+  .chat input, .chat button, .chips button { min-height: 44px; }
+  .check { min-height: 36px; }
+  .cols article { padding: .8rem; }
+  .storm-ticks { font-size: .7rem; }
+  .tl-yours { font-size: .72rem; }
+  .chat-log p, .chat-log .assistant { max-width: 100%; }
+  .view-tabs button { flex: 1; }
+  .console-grid { grid-template-columns: 1fr; }
+  .console-audit { display: block; overflow-x: auto; }   /* wide table scrolls inside its card, not the page */
+}
