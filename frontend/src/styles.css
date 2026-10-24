@@ -36,10 +36,18 @@ figure { margin: .5rem 0 0; } figcaption { font-size: .8rem; font-weight: 600; c
 .timeline .eta { display: inline-block; min-width: 3.5rem; font-variant-numeric: tabular-nums; color: var(--muted); }
 .chat { background: #fff; border: 1px solid var(--line); padding: 1rem; }
 .chat h2 { font-size: 1.05rem; margin: 0 0 .5rem; }
+.chat-suggestions { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .65rem; }
+.chat-suggestions button { border: 1px solid #9CB3CC; border-radius: 999px; background: #F4F8FC; color: var(--ink);
+  padding: .35rem .65rem; font: inherit; font-size: .85rem; cursor: pointer; }
+.chat-suggestions button:hover:not(:disabled) { background: #E8EEF6; }
 .chat-log { max-height: 280px; overflow-y: auto; display: grid; gap: .4rem; margin-bottom: .5rem; }
 .chat-log p { margin: 0; padding: .5rem .7rem; white-space: pre-wrap; max-width: 85%; }
 .chat-log .user { justify-self: end; background: #E8EEF6; }
 .chat-log .assistant { justify-self: start; background: var(--bg); border: 1px solid var(--line); }
+.chat-loading { color: var(--muted); font-style: italic; }
+.chat-error { display: flex; align-items: center; justify-content: space-between; gap: .75rem; color: var(--alert);
+  border-left: 4px solid var(--alert); background: #FBECEE; padding: .5rem .7rem; margin-bottom: .5rem; }
+.chat-error button { padding: .25rem .7rem; }
 .chat form { display: flex; gap: .5rem; }
 .chat input { flex: 1; padding: .5rem; font: inherit; }
 .chat button { padding: .5rem 1rem; font: inherit; }

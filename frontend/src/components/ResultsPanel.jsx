@@ -1,5 +1,5 @@
 // Safety banner + the three columns the challenge asks for:
-// Confirmed facts (utility only) / Our estimate (model) / What you can do (+ alerts).   Owner: Abby
+// Demo utility status / Our estimate (model) / What you can do (+ alerts).   Owner: Abby
 import React from "react";
 import { BAND_COLORS } from "./OutageMap.jsx";
 import StepTimeline from "./StepTimeline.jsx";
@@ -25,13 +25,13 @@ export default function ResultsPanel({ result }) {
           <ul>{guidance.safety.map((s, i) => <li key={i}>{s.text}</li>)}</ul></div>)}
 
       <div className="cols">
-        {/* Column 1: only utility-confirmed facts (from utility_status), never model output. */}
-        <article><h2>Confirmed by AEP</h2>
+        {/* Column 1: explicit demo toggle, never represented as a live AEP feed. */}
+        <article><h2>Demo utility status</h2>
           {restoration.outage_confirmed ? (
-            <><p><strong>Outage confirmed at your location.</strong></p>
+            <><p><strong>Simulation: outage marked confirmed at your location.</strong></p>
               {restoration.confirmed_etr && <p>{restoration.confirmed_etr}</p>}
-              <p className="muted">Source: utility status feed (simulated for this demo).</p></>
-          ) : <p>No outage confirmed at your location yet.</p>}
+              <p className="muted">Source: demo toggle, not a live AEP outage feed.</p></>
+          ) : <p>The demo has not marked an outage confirmed at this location.</p>}
         </article>
 
         {/* Column 2: everything the model estimated, labeled as such, with its assumptions and limits. */}
