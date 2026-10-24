@@ -1,5 +1,7 @@
 # Run from the repo root. Override the interpreter with: make api PY=python3
 PY ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+# Same interpreter, usable after `cd backend`: paths become absolute, bare commands (python3) stay as-is.
+PYRUN := $(if $(findstring /,$(PY)),$(abspath $(PY)),$(PY))
 
 .PHONY: setup data api test web recon pipelines
 
@@ -12,10 +14,10 @@ data:             ## unpack data/archives into data/raw, then build data/process
 	$(MAKE) pipelines PY=$(PY)
 
 api:              ## FastAPI on :8000 (docs at /docs)
-	cd backend && ../$(PY) -m uvicorn app.main:app --reload --port 8000
+	cd backend && $(PYRUN) -m uvicorn app.main:app --reload --port 8000
 
 test:             ## backend tests (synthetic network if no processed data)
-	cd backend && ../$(PY) -m pytest -q
+	cd backend && $(PYRUN) -m pytest -q
 
 web:              ## React dev server on :5173, proxies /api -> :8000
 	cd frontend && npm run dev
