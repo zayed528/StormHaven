@@ -15,10 +15,11 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from app.core.data_loader import get_store
-from app.core.topology import map_point_for, resolve_location
+from app.core.topology import map_point_for, resolve_location, transformer_for_token
+from app.public_demo import enabled as public_demo_enabled, require_demo_location
 
 router = APIRouter(prefix="/api", tags=["locate"])
 
@@ -61,6 +62,16 @@ def locate(premise_id: Optional[str] = None,
            lon: Optional[float] = Query(None, ge=-180, le=180)):
     """Two modes: a premise ID from the bill, or a browser lat/lon ('use my location')."""
     store = get_store()
+
+    if public_demo_enabled():
+        if lat is not None or lon is not None:
+            raise HTTPException(status_code=400, detail="Browser location is disabled in the public demo.")
+        require_demo_location(store, premise_id, None)
+        transformer = transformer_for_token(store, premise_id)
+        xy = _coords(store, transformer)
+        return {"valid": True, "map_point_id": premise_id,
+                "center": {"lat": xy[0], "lon": xy[1]} if xy else None,
+                "zoom": NEIGHBORHOOD_ZOOM}
 
     # --- Mode A: premise ID from the bill ---
     if premise_id:

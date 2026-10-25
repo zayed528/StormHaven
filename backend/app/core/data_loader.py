@@ -264,6 +264,11 @@ def _annotate_customers(g: nx.DiGraph) -> None:
 @lru_cache(maxsize=1)
 def get_store() -> DataStore:
     """Singleton: built on first call, reused for every request. Restart the API to pick up new pipeline output."""
+    # Enforce the public boundary before inspecting S3 or local processed artifacts.
+    from app.public_demo import enabled as public_demo_enabled, validate_environment
+    if public_demo_enabled():
+        validate_environment()
+        return _build_synthetic()
     forced_synthetic = os.getenv("STORMHAVEN_DATA", "").lower() == "synthetic"
     if _s3_enabled() and not forced_synthetic:
         _download_s3_artifacts()
