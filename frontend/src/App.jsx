@@ -79,6 +79,8 @@ export default function App() {
   const stormRef = useRef(null);                     // the storm banner floating under the header
   const [chromeH, setChromeH] = useState(0);         // px covered at the top: header + storm toggles (the map draws under)
   const t = STRINGS[lang];
+  const publicDemo = health?.mode === "public_demo";
+  const demoLocations = publicDemo ? (layers?.premises ?? []).slice(0, 3) : [];
   // The last answer shown for THIS location: its range + the scenario behind it. Sent back so the
   // "estimate updated" message can say old -> new and give the real reason. Refs (not state) because
   // updating them must not trigger another request. Reset when the location or language changes.
@@ -264,7 +266,7 @@ export default function App() {
           <h1>StormHaven</h1>
           <nav className="view-tabs" aria-label={t.viewsAria}>
             <button type="button" aria-pressed={view === "customer"} onClick={() => switchView("customer")}>{t.tabCustomer}</button>
-            <button type="button" aria-pressed={view === "console"} onClick={() => switchView("console")}>{t.tabConsole}</button>
+            {health && !publicDemo && <button type="button" aria-pressed={view === "console"} onClick={() => switchView("console")}>{t.tabConsole}</button>}
           </nav>
           <div className="header-actions">
             {view === "customer" && !onboarding && (
@@ -283,7 +285,7 @@ export default function App() {
             </div>
           </div>
         </div>
-        {health?.synthetic_data && <p className="banner">{t.synthetic}</p>}
+        {(health?.synthetic_data || publicDemo) && <p className="banner">{t.synthetic}</p>}
       </header>
 
       {/* Storm level: a liquid-glass pill floating centered just under the header (customer view only). */}
@@ -304,8 +306,10 @@ export default function App() {
         {onboarding && (
           <div className="onboard-overlay">
             {/* Abby's component needs t.onboarding; if that's ever missing, the stand-in shows instead of a blank page. */}
-            {t.onboarding ? <Onboarding t={t} onComplete={onboarded} /> : <OnboardingStandIn t={t} onComplete={onboarded} />}
-            <button type="button" className="link-button" onClick={() => setOnboarding(false)}>{t.onboardSkip}</button>
+            {!health ? <p className="muted">{t.console.loading}</p>
+              : t.onboarding ? <Onboarding t={t} onComplete={onboarded} publicDemo={publicDemo}
+                  demoLocations={demoLocations} /> : <OnboardingStandIn t={t} onComplete={onboarded} />}
+            {health && !publicDemo && <button type="button" className="link-button" onClick={() => setOnboarding(false)}>{t.onboardSkip}</button>}
           </div>)}
 
         {error && <p role="alert" className="error toast">{t.apiError(error)}</p>}
@@ -316,7 +320,7 @@ export default function App() {
         {/* key = the home: a new home remounts the cards, so they slide in again; storm changes just update them. */}
         {showDock && <ResultsPanel key={premise} t={t} result={result} changes={changes} onClose={() => setDockOpen(false)}
           whatIf={{ scenario, onScenario: setScenario, baseCrews: BASE_CREWS, moreCrews: MORE_CREWS }}
-          notifyRequest={{ premise_id: premise, scenario, profile,
+          notifyRequest={publicDemo ? null : { premise_id: premise, scenario, profile,
                            previous_range_text: shownPrev.current.range, previous_scenario: shownPrev.current.scenario }} />}
 
         <ChatPanel t={t} premiseId={premise} scenario={scenario} profile={profile} utilityStatus={utilityStatus} />

@@ -6,6 +6,9 @@ Loads data/processed/* (produced by pipelines/). Network and labor load independ
   - labor (labor_hours/multipliers/access_adders) is AEP if pipelines/04 ran, else placeholders
 So everyone can develop from hour 1, and restarting the API after a pipeline run picks up real data.
 Set STORMHAVEN_DATA=synthetic to force the synthetic network even when real data exists (tests do this).
+Set STORMHAVEN_S3_ENABLED=true with STORMHAVEN_S3_BUCKET and STORMHAVEN_S3_PREFIX to
+download the approved private runtime bundle into data/processed. Credentials come from boto3's
+standard AWS provider chain. Set STORMHAVEN_DATA=real to fail instead of falling back to synthetic data.
 
 Processed file contract (pipelines must output exactly this):
   nodes.csv          node_id, kind, circuit_id, lat, lon, fail_prob, n_events_observed       (02 + 03)
@@ -24,8 +27,10 @@ from __future__ import annotations
 import json
 import os
 import random
+import tempfile
 from dataclasses import dataclass, field
 from functools import lru_cache
+from pathlib import Path
 
 import networkx as nx
 import pandas as pd
@@ -34,6 +39,17 @@ from app.config import ASSUMPTIONS, DATA_PROCESSED
 
 RCFG = ASSUMPTIONS["restoration"]
 DATA_ARCHIVES = DATA_PROCESSED.parent / "archives"   # committed AEP zips; unpacked + built by `make data`
+S3_ARTIFACTS = (
+    "nodes.csv",
+    "edges.csv",
+    "damage_mix.json",
+    "meta.json",
+    "priority_nodes.csv",
+    "labor_hours.csv",
+    "multipliers.json",
+    "access_adders.json",
+    "circuits.geojson",
+)
 
 
 @dataclass
@@ -103,6 +119,78 @@ def _load_processed() -> DataStore:
                      notes=["Network: AEP data (data/processed).", labor_note],
                      severity_curve=curve, median_event_records=meta.get("median_event_records"),
                      damage_type_shares=meta.get("damage_type_shares"))
+
+
+def _s3_enabled() -> bool:
+    return os.getenv("STORMHAVEN_S3_ENABLED", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _validate_artifact(path: Path, filename: str) -> None:
+    if not path.is_file() or path.stat().st_size == 0:
+        raise RuntimeError(f"S3 artifact is empty or missing: {filename}")
+    if filename.endswith(".json"):
+        try:
+            json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"S3 artifact is invalid: {filename}") from exc
+    elif filename == "circuits.geojson":
+        try:
+            geojson = json.loads(path.read_text())
+            if not isinstance(geojson.get("features"), list):
+                raise ValueError("missing features")
+        except (OSError, json.JSONDecodeError, AttributeError, ValueError) as exc:
+            raise RuntimeError(f"S3 artifact is invalid: {filename}") from exc
+    elif filename == "nodes.csv":
+        with path.open() as stream:
+            header = stream.readline().strip().split(",")
+        if not {"node_id", "kind", "circuit_id", "lat", "lon", "fail_prob", "n_events_observed"} <= set(header):
+            raise RuntimeError(f"S3 artifact has an unexpected schema: {filename}")
+    elif filename == "edges.csv":
+        with path.open() as stream:
+            header = stream.readline().strip().split(",")
+        if not {"parent_id", "child_id"} <= set(header):
+            raise RuntimeError(f"S3 artifact has an unexpected schema: {filename}")
+
+
+def _download_s3_artifacts() -> None:
+    """Download only the approved runtime bundle into DATA_PROCESSED atomically."""
+    bucket = os.getenv("STORMHAVEN_S3_BUCKET", "").strip()
+    prefix = os.getenv("STORMHAVEN_S3_PREFIX", "real-data/").strip().strip("/")
+    if not bucket:
+        raise RuntimeError("STORMHAVEN_S3_BUCKET is required when S3 data is enabled")
+    try:
+        import boto3
+        client = boto3.client("s3", region_name=os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-east-2")
+        DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
+        for filename in S3_ARTIFACTS:
+            target = DATA_PROCESSED / filename
+            if target.exists():
+                _validate_artifact(target, filename)
+                continue
+            key = f"{prefix}/{filename}" if prefix else filename
+            try:
+                response = client.get_object(Bucket=bucket, Key=key)
+                body = response["Body"]
+                with tempfile.NamedTemporaryFile("wb", dir=DATA_PROCESSED, prefix=f".{filename}.",
+                                                 suffix=".tmp", delete=False) as tmp:
+                    temp_path = Path(tmp.name)
+                    size = 0
+                    while chunk := body.read(1024 * 1024):
+                        tmp.write(chunk)
+                        size += len(chunk)
+                expected_size = response.get("ContentLength")
+                if expected_size is not None and size != expected_size:
+                    raise RuntimeError(f"S3 artifact size changed while downloading: {filename}")
+                _validate_artifact(temp_path, filename)
+                os.replace(temp_path, target)
+            except Exception as exc:
+                if "temp_path" in locals() and temp_path.exists():
+                    temp_path.unlink()
+                raise RuntimeError(f"Unable to load approved S3 artifact: {filename}") from exc
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError("Unable to access configured S3 data artifacts") from exc
 
 
 # ----------------------------------------------------------- synthetic network
@@ -176,8 +264,17 @@ def _annotate_customers(g: nx.DiGraph) -> None:
 @lru_cache(maxsize=1)
 def get_store() -> DataStore:
     """Singleton: built on first call, reused for every request. Restart the API to pick up new pipeline output."""
+    # Enforce the public boundary before inspecting S3 or local processed artifacts.
+    from app.public_demo import enabled as public_demo_enabled, validate_environment
+    if public_demo_enabled():
+        validate_environment()
+        return _build_synthetic()
     forced_synthetic = os.getenv("STORMHAVEN_DATA", "").lower() == "synthetic"
+    if _s3_enabled() and not forced_synthetic:
+        _download_s3_artifacts()
     built = (DATA_PROCESSED / "nodes.csv").exists()
+    if os.getenv("STORMHAVEN_DATA", "").lower() == "real" and not built:
+        raise RuntimeError("Real data mode requires nodes.csv in the local cache or configured S3 artifacts")
     if not forced_synthetic and built:
         return _load_processed()
     store = _build_synthetic()
