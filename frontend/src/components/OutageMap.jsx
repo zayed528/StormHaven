@@ -29,8 +29,9 @@ const MAP_THEME = {
 const HEAT_COLORS = [[0, "rgba(76,159,112,0)"], [0.08, "rgba(76,159,112,0.45)"], [0.3, "rgba(227,178,60,0.75)"],
                      [0.6, "rgba(217,104,43,0.85)"], [1, "rgba(164,36,59,0.95)"]];
 
-// Props: layers = GET /api/map response, selectedId = chosen premise, onSelect(id) = click handler, t = UI text (i18n.js).
-export default function OutageMap({ t, dark = false, layers, selectedId, onSelect }) {
+// Props: layers = GET /api/map response, selectedId = chosen premise, onSelect(id) = click handler, t = UI text (i18n.js),
+// focus = {lat, lon, zoom, key} to zoom to the customer's neighborhood (null = whole territory).
+export default function OutageMap({ t, dark = false, layers, focus = null, selectedId, onSelect }) {
   const c = dark ? MAP_THEME.dark : MAP_THEME.light;
   const [mode, setMode] = useState("dots");        // "dots" | "heat"
   const heat = mode === "heat";
@@ -77,13 +78,14 @@ export default function OutageMap({ t, dark = false, layers, selectedId, onSelec
         marker: { size: heat ? 4 : 7, color: BAND_COLORS[band] },
       };
     });
-    // 3) Selected premise ring
+    // 3) The customer's home: a glowing target drawn UNDER its dot (a soft outer glow + a solid disc; the colored
+    //    dot sits in the middle). scattermap ignores marker outlines, so a hollow ring would be invisible.
     const sel = layers.premises.find((p) => p.id === selectedId);
-    const ring = sel ? [{
-      type: "scattermap", mode: "markers", lat: [sel.lat], lon: [sel.lon], hoverinfo: "skip",
-      marker: { size: 22, color: "rgba(0,0,0,0)", line: { width: 3, color: c.ring } }, showlegend: false,
-    }] : [];
-    return [...lines, ...heatLayer, ...halo, ...byBand, ...ring];
+    const target = sel ? [30, 17].map((size, i) => ({
+      type: "scattermap", mode: "markers", lat: [sel.lat], lon: [sel.lon], hoverinfo: "skip", showlegend: false,
+      marker: { size, color: c.ring, opacity: i === 0 ? 0.3 : 1 },
+    })) : [];
+    return [...lines, ...heatLayer, ...halo, ...target, ...byBand];
   }, [layers, lineCoords, selectedId, t, heat, c]);
 
   // Fit the view to the data: center on the middle of the points' bounding box, zoom so it all fits.
@@ -105,11 +107,13 @@ export default function OutageMap({ t, dark = false, layers, selectedId, onSelec
     <Plot
       data={traces}
       layout={{
-        map: { style: c.style, center: view.center, zoom: view.zoom },
+        map: { style: c.style, center: focus ? { lat: focus.lat, lon: focus.lon } : view.center,
+               zoom: focus ? focus.zoom : view.zoom },
         paper_bgcolor: c.paper,
         margin: { l: 0, r: 0, t: 0, b: 0 },
         legend: { x: 0.01, y: 0.99, bgcolor: c.legendBg, font: { color: c.text }, title: { text: t.mapLegend, font: { color: c.text } } },
-        uirevision: "keep",                                   // don't reset zoom on every update
+        // Keep the user's pan/zoom across updates; a new focus (a new key) re-centers the map on purpose.
+        uirevision: focus?.key ?? "overview",
       }}
       config={{ displayModeBar: false, scrollZoom: true, responsive: true }}
       style={{ width: "100%", height: "100%" }}

@@ -58,6 +58,53 @@ def _priority_percentiles(store: DataStore) -> dict[str, float]:
     return _PRIORITY_CACHE[id(store)]
 
 
+_QUEUE_CACHE: dict[int, tuple[np.ndarray, np.ndarray] | None] = {}
+
+
+def _queue_curve(store: DataStore) -> tuple[np.ndarray, np.ndarray] | None:
+    """Share of the storm's repair work done BEFORE crews reach a device, as a function of the device's
+    restoration-priority percentile, learned from replaying real storms in the planner (engines/planner.py).
+    Calibrates the customer engine against the storm replay so both tell the same story.
+    Real data only (None on the synthetic network -> the simple rule 1 - priority is used)."""
+    if id(store) in _QUEUE_CACHE:
+        return _QUEUE_CACHE[id(store)]
+    curve = None
+    if not store.is_synthetic:
+        from app.engines import planner                     # local import: planner is optional (needs real data)
+        if planner.available():
+            qc = ASSUMPTIONS["restoration"]["queue_calibration"]
+            prio = _priority_percentiles(store)
+            xs, ys = [], []
+            for s in planner.storms()[:qc["storms"]]:
+                st = planner._storm(s["storm_id"])
+                hrs = planner._hours(st, CFG["crew_size_persons"], "normal", 1.0)
+                _, _, order = planner._simulate(st, hrs, qc["crews"], CFG["assessment_hours"], record=True)
+                per_crew = hrs.sum() / qc["crews"]              # storm work per crew = backlog / crews
+                for d, t0 in order:
+                    xs.append(prio[st.devices[d]])
+                    ys.append((t0 - CFG["assessment_hours"]) / per_crew)
+            if xs:
+                edges = np.array(qc["bin_edges"])
+                idx = np.clip(np.digitize(xs, edges) - 1, 0, len(edges) - 2)
+                mids, means = [], []
+                for b in range(len(edges) - 1):
+                    sel = idx == b
+                    if sel.any():
+                        mids.append((edges[b] + edges[b + 1]) / 2)
+                        means.append(float(np.mean(np.array(ys)[sel])))
+                # higher priority never waits longer (monotone), anchored at 1 (nothing ahead) for the very top
+                means = list(np.minimum.accumulate(means))
+                curve = (np.array(mids + [1.0]), np.clip(np.array(means + [0.0]), 0, 1))
+    _QUEUE_CACHE[id(store)] = curve
+    return curve
+
+
+def _work_ahead(store: DataStore, p: float) -> float:
+    """Share of storm work ahead of a device with priority percentile p."""
+    curve = _queue_curve(store)
+    return float(np.interp(p, *curve)) if curve else 1 - p
+
+
 def _simulate(store: DataStore, pr: PathRisk, sc: StormScenario, n: int, seed: int = 42):
     """Returns (totals[n], per_device_completion[n, len(path)] with nan where undamaged).
 
@@ -116,7 +163,7 @@ def _simulate(store: DataStore, pr: PathRisk, sc: StormScenario, n: int, seed: i
     labor *= to_clock_hours * access * rng.lognormal(0, CFG["labor_noise_sigma"], size=(n, k))
     # 4) Queue wait: the share of the backlog ranked ahead of this device, split across available crews.
     #    Highest-priority device (percentile 1.0) waits ~0; low-priority ones wait for most of the backlog.
-    wait = np.array([backlog * (1 - prio[node]) for node in path]) / sc.crews_available * access
+    wait = np.array([backlog * _work_ahead(store, prio[node]) for node in path]) / sc.crews_available * access
     # 5) Each damaged device is done at assessment + wait + labor; undamaged ones are nan (ignored).
     completion = np.where(damaged, CFG["assessment_hours"] + wait + labor, np.nan)
     # Your power is back only when EVERY damaged device on your path is fixed -> take the max.
@@ -154,6 +201,22 @@ def _range_words(lo: float, hi: float) -> str:
     a, ua, b, ub = range_endpoints(lo, hi)
     unit = lambda n, u: f"{n} {u[:-1]}" if n == 1 else f"{n} {u}"      # noqa: E731  (1 hour / 1 day)
     return f"{a} to {unit(b, ub)}" if ua == ub else f"{unit(a, ua)} to {unit(b, ub)}"
+
+
+def storm_context(store: DataStore, sc: StormScenario) -> str | None:
+    """One customer sentence from the storm replay (engines/planner.py): how fast homes came back in the closest
+    real storm, with this scenario's crews. None on the synthetic network or for mild storms."""
+    if store.is_synthetic:
+        return None
+    from app.engines import planner                         # local import: planner needs real data
+    ctx = planner.customer_context(round(sc.severity_percentile, 1), sc.crews_available, crew_size(sc),
+                                   sc.road_access.value)
+    if not ctx:
+        return None
+    h = ctx["hours_to_90pct"]
+    when = f"about {max(1, round(h))} hours" if h < 48 else f"about {round(h / 24)} days"
+    return (f"In our replay of the {ctx['label']} with {ctx['crews']} crews, 9 in 10 affected homes "
+            f"had power back within {when}.")
 
 
 def estimate_restoration(store: DataStore, pr: PathRisk, sc: StormScenario,
@@ -238,4 +301,7 @@ def estimate_restoration(store: DataStore, pr: PathRisk, sc: StormScenario,
                           "Repair times use placeholder labor hours until AEP's labor sheet is loaded."),
                          "Crews restore the repairs that bring back the most customers first."],
             could_change_if=[d.plain_language for d in drivers]),
-        confirmed_etr=None)   # never set by the model; service.py fills it from utility_status only
+        confirmed_etr=None,   # never set by the model; service.py fills it from utility_status only
+        # Customer sentence from the storm replay. Sent only once schemas.py has the field (Jaid), so this
+        # file never breaks the response contract.
+        **({"storm_context": storm_context(store, sc)} if "storm_context" in RestorationResponse.model_fields else {}))

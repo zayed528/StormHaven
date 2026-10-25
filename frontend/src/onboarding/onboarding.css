@@ -1,0 +1,34 @@
+/* Onboarding first screen (Onboarding.jsx).   Owner: Abby
+   Uses the app's theme variables (--ink/--muted/--bg/--line/--alert) so light & dark both work with no extra code.
+   Phone-first: a single centered card that fills a narrow screen and stays readable on a projector. */
+.onboarding { display: flex; justify-content: center; align-items: flex-start; padding: 1.5rem 1rem; }
+.ob-card { width: 100%; max-width: 440px; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 10px; padding: 1.5rem; display: grid; gap: 1rem; }
+.ob-card h1 { margin: 0; font-size: 1.5rem; color: var(--ink); }
+.ob-lede { margin: 0; color: var(--muted); font-size: .95rem; }
+
+.ob-field { display: grid; gap: .3rem; font-weight: 600; color: var(--ink); }
+.ob-field input { font: inherit; font-weight: 400; padding: .6rem .7rem; border: 1px solid var(--line);
+  border-radius: 6px; background: #fff; color: var(--ink); }
+.ob-hint { font-weight: 400; font-size: .82rem; color: var(--muted); }
+
+.ob-needs { border: 1px solid var(--line); border-radius: 6px; margin: 0; padding: .6rem .8rem;
+  display: grid; gap: .4rem; }
+.ob-needs legend { font-size: .85rem; color: var(--muted); padding: 0 .3rem; }
+.onboarding .check { display: flex; align-items: center; gap: .5rem; font-size: .95rem; cursor: pointer; }
+.ob-enroll { padding: .2rem; }
+
+.ob-error { margin: 0; color: var(--alert); font-size: .9rem; }
+
+.ob-actions { display: grid; gap: .5rem; }
+.ob-primary { padding: .7rem; font: inherit; font-weight: 600; border: none; border-radius: 6px;
+  background: var(--ink); color: #fff; cursor: pointer; }
+.ob-primary:disabled { opacity: .5; cursor: default; }
+.ob-secondary { padding: .55rem; font: inherit; border: 1px solid var(--line); border-radius: 6px;
+  background: transparent; color: var(--ink); cursor: pointer; }
+.ob-secondary:disabled { opacity: .6; cursor: default; }
+
+.ob-privacy { margin: 0; font-size: .78rem; color: var(--muted); text-align: center; }
+
+/* Dark mode: the input's white fill is too bright; tie it to the page surface instead. */
+[data-theme="dark"] .ob-field input { background: #0F1623; }

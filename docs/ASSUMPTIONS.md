@@ -76,7 +76,7 @@ What the app does with weather: (1) labels the severity slider with the closest 
 
 Model: Monte Carlo (`n_simulations` draws) over damage on the premise's upline path, conditioned on the premise losing power.
 For each damaged device: **clock hours = (qty × labor_hours[type] + access_adder) × indirect_multiplier ÷ crew_size × access_multiplier × lognormal noise**, where qty is 1–2.
-**Queue wait** = storm-wide backlog × (1 − the device's priority percentile) ÷ crews × access_multiplier. **Priority = value ÷ effort** (AEP data guide): (customers restored + a bonus if the device feeds a critical facility) ÷ expected repair hours for that kind of device, from its historical damage mix. This is step restoration: high-value, quick main-line repairs go first.
+**Queue wait** = storm-wide backlog × (share of storm work ahead of this device) ÷ crews × access_multiplier. On real data, the "share of work ahead" is **learned from replaying the 3 largest real storms in the planner** (`restoration.queue_calibration`), as a function of the device's priority percentile, so the customer's range agrees with the storm replay. Feb 2025: the typical affected home's best guess is 15 h vs the replay's 50%-restored time of 16 h (before calibration: 8 h). On the synthetic network it's 1 − priority percentile. **Priority = value ÷ effort** (AEP data guide): (customers restored + a bonus if the device feeds a critical facility) ÷ expected repair hours for that kind of device, from its historical damage mix. This is step restoration: high-value, quick main-line repairs go first.
 **Crew size** is a stated scenario input, 2–8 people (`scenario.crew_size`, default `crew_size_persons`), as the guide asks. Clock hours = person-hours ÷ crew size.
 **Storm-wide backlog** (real data) = expected damage records in a storm this size (median records × undamped m(s)) × average person-hours per record (AEP labor × the ARCOS damage-type mix) × indirect multiplier ÷ crew size. On the synthetic network it is `base_backlog_hours_per_crew` × `default_crews` × m(s).
 **Restore time** = assessment hours + the maximum over damaged devices of (wait + labor). We report P10, P50 and P90, plus drivers: the change in P50 with 50% more crews, with blocked roads, and with a storm 20 percentiles stronger. Before an outage the range is phrased "If you lose power…"; once the (simulated) utility feed confirms an outage it becomes "Our estimate: power back in…" and stays labeled as a model estimate.
@@ -92,7 +92,7 @@ For each damaged device: **clock hours = (qty × labor_hours[type] + access_adde
 | `restoration.access_multipliers` | normal 1.0 / limited 1.4 / blocked 2.2 | storm-wide access slowdown (detours, tree clearing), applied to labor **and** queue wait | assumed | sensitivity check only; AEP gave no storm-access data |
 | (data) access adders | sheet *Labor only work*. limited → "Access Constraint Adder", blocked → "Remote Location Adder" | person-hours added per job | AEP × assumed (the mapping is ours) | — |
 | `restoration.base_backlog_hours_per_crew` | 10.0 | **synthetic network only**: backlog per crew at a median storm | assumed | — |
-| `restoration.default_crews` | 20 | synthetic backlog sizing; the UI's starting crew count is also 20 | assumed | **ask AEP** for typical storm crew counts; the restoration backtest is blocked until `Repaired_D` is understood |
+| `restoration.default_crews` | 20 | crews working this ~118k-customer area before mutual aid (20 × 3 = 60 line workers); the UI's starting crew count | assumed (mentors unavailable) | the planner shows the trade-off: everyone back in 3 days needs ~180 people |
 | `restoration.critical_facility_priority_bonus` | 5000 | customer-equivalents added to devices feeding hospitals, fire or EMS | assumed | — |
 | `restoration.unknown_damage_type_hours` | 4.0 | person-hours when a damage type has no labor entry | assumed | the share of ARCOS records hitting this fallback should be ≈ 0 after `DAMAGE_NAME_MAP` |
 | `restoration.repair_recipes` | recloser, transformer, fuse cutout, switch… | CUs replaced for the damage types that don't depend on pole size or phases. Broken poles and downed wire are priced per record (next section) | AEP × assumed | mentor check |
@@ -130,6 +130,8 @@ Outputs: hours to restore 50% / 90% / everyone; P10–P90 ranges (30 Monte Carlo
 | `target_days` | 2, 3, 7 | the guide's scenarios |
 | `n_simulations` | 30 | Monte Carlo runs for the planning ranges |
 | `workload` (API) | 0.5–3 | scale the storm's recorded damage ("what if it were 1.5× worse") |
+
+**Customer storm context** (`restoration.storm_context`, shown once `RestorationResponse.storm_context` exists): the replayable real storm closest to the customer's severity, replayed with *their* crew and road scenario, becomes one sentence, e.g. "In our replay of the Feb 2025 storm with 20 crews, 9 in 10 affected homes had power back within about 3 days." There's no sentence for storms more than `planner.context_margin_pct` milder than any replayable storm.
 
 Limits: no switching or back-feed (the switch layer isn't in the topology); crews work around the clock with no shift limits; crews don't pick jobs by geography beyond what the 4.5 travel multiplier already covers.
 
@@ -171,5 +173,6 @@ Rules, not generation: risk band × duration bucket × **declared** needs select
 4. Storm severity is one number, not wind, ice or track.
 5. Storm history is thin: 36 recorded storms, only 3 large. The model learns *where* damage happens mostly from one storm (Feb 2025, ~75% of all records).
 6. ARCOS gives damage locations, not customer outage records. "Out" means "damage on your upline path"; partial-phase or momentary outages aren't captured.
-7. Restoration ranges are not yet backtested: ARCOS repair dates look like record-closure dates (see DATA_NOTES).
-8. The planner replays recorded damage with no switching or back-feed, and crews never rest. Real restorations are slower per crew but can re-route power.
+7. Restoration ranges are not backtested. We treat ARCOS `Repaired_D` as a record-closure date (whole days; median 21–23 days in two storms vs 1 day in another), not a power-restored time. Stated assumption; AEP mentors unavailable to confirm.
+8. The customer range is calibrated on the replay for the *typical* home. For the slowest tenth of homes in a Feb-2025-sized storm it is still optimistic (~40 h vs ~70 h in the replay).
+9. The planner replays recorded damage with no switching or back-feed, and crews never rest. Real restorations are slower per crew but can re-route power.
