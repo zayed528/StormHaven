@@ -92,6 +92,12 @@ The internet-facing deployment runs in a fail-closed demo mode on a synthetic ne
 **Why does the customer pick the storm strength?**
 They don't. The banner shows the forecast scenario ("planning for a severe storm, similar to Sep 2024"). "What if…?" lets them see how much a stronger storm, blocked roads or extra crews would change their answer. The engines learn *where* damage happens from AEP history; *how strong* the storm is comes from the forecast.
 
+**What if someone depends on medical equipment?**
+They can opt in by ticking "Powered medical equipment" and, optionally, telling us how long its battery lasts. We compare that with *their* restoration range. If the battery may run out (shorter than our best guess, or than the pessimistic end), the warning goes first and AEP's priority-call escalation switches on. We never ask about health unprompted and never infer it.
+
+**Where is "confirmed by AEP" vs your estimate?**
+A strip above the estimate cards says either "No outage confirmed at your location yet. Everything below is our estimate." or shows the utility's confirmed time (simulated in the demo). Confirmed facts, model estimates and customer actions are three visibly separate things.
+
 ## Known simplifications (say them before they're found)
 These are listed in `docs/ASSUMPTIONS.md` → "Known simplifications":
 - damage treated as independent across devices

@@ -128,6 +128,11 @@ const RULES = [
   [/^(\d+) crews available storm-wide\.$/, (n) => `${n} cuadrillas disponibles en toda la zona afectada.`],
   [/^Road access: (normal|limited|blocked)\.$/, (r) => `Acceso por carretera: ${ROAD[r]}.`],
   [/^Each repair crew has (\d+) people\.$/, (n) => `Cada cuadrilla de reparación tiene ${n} personas.`],
+  // alerts.py schedule timings
+  [/^(\d+) hours before expected landfall$/, (h) => `${h} horas antes de la llegada prevista de la tormenta`],
+  [/^Within (\d+) minutes of outage detection$/, (m) => `En menos de ${m} minutos tras detectar el apagón`],
+  [/^When the estimate moves more than (\d+) hours?$/, (h) => `Cuando la estimación cambie más de ${h} ${h === "1" ? "hora" : "horas"}`],
+  [/^When power is restored$/, () => "Cuando vuelva la luz"],
   // restoration.storm_context (planner replay sentence)
   [/^In our replay of the (.+) with (\d+) crews, 9 in 10 affected homes had power back within about (.+)\.$/,
     (storm, n, d) => `En nuestra simulación de la ${toEs(storm).replace(/^Tormenta/, "tormenta")} con ${n} cuadrillas, `

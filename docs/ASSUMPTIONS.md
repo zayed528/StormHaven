@@ -144,6 +144,14 @@ Rules, not generation: risk band × duration bucket × **declared** needs select
 | `guidance.duration_buckets` | short < 4 h ≤ day < 24 h ≤ multi_day < 72 h ≤ extended (on P90) | which advice applies, e.g. water storage for day+ | assumed (matches FoodSafety.gov 4 h fridge / 48 h freezer guidance) |
 | (code) fallback bucket | unknown location → treated as a day-long outage | advice errs on the safe side | assumed |
 
+### Medical backup check (`engines/guidance.py` → `guidance.backup_check`)
+Only when the customer **declares** powered medical equipment **and** chooses to tell us how long its backup lasts (`profile.backup_power_hours`, 0–240 h). Never asked otherwise, never inferred. The backup is compared with **this home's** restoration estimate:
+- **short:** backup < best guess (P50)
+- **tight:** backup < pessimistic end (P90)
+- **ok:** backup outlasts P90
+
+Short or tight puts the warning first in "What you can do" and activates a **priority human-call escalation** ("Priority call from AEP within the hour; help find a place with power"). The rule, not a model, makes the call; the wording is in `content/guidance_library.yaml` (EN/ES).
+
 ## Alerts: "Do I qualify?"
 
 | key | value | meaning | source |

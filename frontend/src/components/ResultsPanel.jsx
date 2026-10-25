@@ -10,6 +10,7 @@ import { fmtRange } from "../i18n.js";
 import { BAND_COLORS } from "./OutageMap.jsx";
 import StormToggle from "./ScenarioControls.jsx";
 import StepTimeline from "./StepTimeline.jsx";
+import StormStory from "./StormStory.jsx";
 
 // Safety banner color class per risk band (colors match the map dots). Unknown = location not matched.
 // Titles and intro sentences live in i18n.js (t.safety).
@@ -147,11 +148,19 @@ export default function ResultsPanel({ t, result, changes, notifyRequest, whatIf
     // Card 4: alerts (eligibility, follow-ups, the messages and "send as a text").
     alerts: (i) => (
         <article key="alerts" className="card" style={{ "--i": i }} tabIndex={0}><h2>{t.alerts}</h2>
+          {!fallback && <StormStory t={t} messages={alerts.messages} scenario={sc} onScenario={whatIf.onScenario}
+            setConfirmed={you.setConfirmed} />}
           <p>{alerts.eligible ? t.eligibleYes : t.eligibleNo}</p>
           <ul className="muted">{alerts.reasons.map((r, i) => <li key={i}>{t.tr(r)}</li>)}</ul>
           {activeEsc.length > 0 && (
             <div className="escalation"><strong>{t.followUp}</strong>
               <ul>{activeEsc.map((e, i) => <li key={i}>{t.tr(e.action)}</li>)}</ul></div>)}
+          {alerts.schedule.length > 0 && (
+            <details><summary>{t.scheduleTitle}</summary>
+              <ul className="schedule">{alerts.schedule.map((s, i) => (
+                <li key={i}><strong>{t.messageLabels[s.trigger] ?? s.trigger}</strong> · {t.tr(s.timing)}
+                  {" "}<span className="muted">({t.channels?.[s.channel] ?? s.channel})</span></li>))}</ul>
+            </details>)}
           <details open><summary>{t.messagesTitle}</summary>
             {Object.entries(alerts.messages).map(([key, m]) => (
               <figure key={key}><figcaption>{t.messageLabels[key] ?? key}</figcaption><blockquote>{m}</blockquote>

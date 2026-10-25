@@ -324,7 +324,8 @@ export default function App() {
         {showDock && <ResultsPanel key={premise} t={t} result={result} changes={changes} onClose={() => setDockOpen(false)}
           whatIf={{ scenario, onScenario: setScenario, baseCrews: BASE_CREWS, moreCrews: MORE_CREWS }}
           you={{ needs, toggleNeed, backupHours, setBackupHours, utilityConfirmed,
-                 toggleConfirmed: publicDemo ? null : () => setUtilityConfirmed(!utilityConfirmed) }}
+                 toggleConfirmed: publicDemo ? null : () => setUtilityConfirmed(!utilityConfirmed),
+                 setConfirmed: setUtilityConfirmed }}
           notifyRequest={publicDemo ? null : { premise_id: premise, scenario, profile,
                            previous_range_text: shownPrev.current.range, previous_scenario: shownPrev.current.scenario }} />}
 
