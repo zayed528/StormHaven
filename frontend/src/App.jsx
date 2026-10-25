@@ -64,7 +64,6 @@ export default function App() {
   // "What if...?" controls in the answer change it from there.
   const [scenario, setScenario] = useState({ severity_percentile: FORECAST_PCT, crews_available: BASE_CREWS, road_access: "normal", extra_damage: [] });
   const [needs, setNeeds] = useState([]);
-  const [backupHours, setBackupHours] = useState("");   // opt-in, only with "medical_device": device backup power
   const [enrolled, setEnrolled] = useState(true);
   const [utilityConfirmed, setUtilityConfirmed] = useState(false);
   const [lang, setLang] = useState("en");          // UI language; also profile.language (localized SMS messages)
@@ -95,9 +94,7 @@ export default function App() {
   const zoomToResult = useRef(false);
 
   // Only declared needs and channel TYPES are sent; no names, phone numbers, or addresses.
-  const backup = needs.includes("medical_device") && backupHours !== "" ? Number(backupHours) : null;
-  const profile = { declared_needs: needs, alerts_enrolled: enrolled, channels: enrolled ? ["sms"] : [], language: lang,
-                    ...(backup !== null && Number.isFinite(backup) ? { backup_power_hours: backup } : {}) };
+  const profile = { declared_needs: needs, alerts_enrolled: enrolled, channels: enrolled ? ["sms"] : [], language: lang };
   const utilityStatus = utilityConfirmed ? { outage_confirmed: true, confirmed_etr: t.demoEtr } : null;
 
   // Theme: stamp it on <html> (styles.css switches every color on data-theme) and remember the choice.
@@ -240,7 +237,7 @@ export default function App() {
       }).catch((e) => setError(e.message));
     }, 200);
     return () => clearTimeout(tm);      // cancel the pending call if inputs change again within 200 ms
-  }, [premise, scenario, needs, backupHours, enrolled, utilityConfirmed, lang]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [premise, scenario, needs, enrolled, utilityConfirmed, lang]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleNeed = (n) => setNeeds(needs.includes(n) ? needs.filter((x) => x !== n) : [...needs, n]);
 
@@ -323,9 +320,6 @@ export default function App() {
         {/* key = the home: a new home remounts the cards, so they slide in again; storm changes just update them. */}
         {showDock && <ResultsPanel key={premise} t={t} result={result} changes={changes} onClose={() => setDockOpen(false)}
           whatIf={{ scenario, onScenario: setScenario, baseCrews: BASE_CREWS, moreCrews: MORE_CREWS }}
-          you={{ needs, toggleNeed, backupHours, setBackupHours, utilityConfirmed,
-                 toggleConfirmed: publicDemo ? null : () => setUtilityConfirmed(!utilityConfirmed),
-                 setConfirmed: setUtilityConfirmed }}
           notifyRequest={publicDemo ? null : { premise_id: premise, scenario, profile,
                            previous_range_text: shownPrev.current.range, previous_scenario: shownPrev.current.scenario }} />}
 

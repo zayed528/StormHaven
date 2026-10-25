@@ -77,12 +77,6 @@ const EXACT = {
   "No phone or email on file.": "No hay teléfono ni correo electrónico registrado.",
   "Declared medical or critical-facility need: priority alerts and human follow-up.":
     "Necesidad médica o de instalación crítica declarada: alertas prioritarias y seguimiento por una persona.",
-  "Priority call from AEP within the hour; help find a place with power":
-    "Llamada prioritaria de AEP en menos de una hora; ayuda para encontrar un lugar con electricidad",
-  "Declared medical device whose backup may run out before power returns":
-    "Equipo médico declarado cuyo respaldo podría agotarse antes de que vuelva la luz",
-  "No outage confirmation from a live utility feed is available.":
-    "AEP aún no ha confirmado un apagón en su ubicación; esto es una estimación.",
   "Voice call + human agent follow-up; share nearest power/shelter options":
     "Llamada de voz y seguimiento por un agente; compartir las opciones más cercanas de electricidad o refugio",
   "Proactive apology + new estimate + reason": "Disculpa proactiva, nueva estimación y motivo",
@@ -128,15 +122,6 @@ const RULES = [
   [/^(\d+) crews available storm-wide\.$/, (n) => `${n} cuadrillas disponibles en toda la zona afectada.`],
   [/^Road access: (normal|limited|blocked)\.$/, (r) => `Acceso por carretera: ${ROAD[r]}.`],
   [/^Each repair crew has (\d+) people\.$/, (n) => `Cada cuadrilla de reparación tiene ${n} personas.`],
-  // alerts.py schedule timings
-  [/^(\d+) hours before expected landfall$/, (h) => `${h} horas antes de la llegada prevista de la tormenta`],
-  [/^Within (\d+) minutes of outage detection$/, (m) => `En menos de ${m} minutos tras detectar el apagón`],
-  [/^When the estimate moves more than (\d+) hours?$/, (h) => `Cuando la estimación cambie más de ${h} ${h === "1" ? "hora" : "horas"}`],
-  [/^When power is restored$/, () => "Cuando vuelva la luz"],
-  // restoration.storm_context (planner replay sentence)
-  [/^In our replay of the (.+) with (\d+) crews, 9 in 10 affected homes had power back within about (.+)\.$/,
-    (storm, n, d) => `En nuestra simulación de la ${toEs(storm).replace(/^Tormenta/, "tormenta")} con ${n} cuadrillas, `
-      + `9 de cada 10 hogares afectados recuperaron la luz en aproximadamente ${dur(d)}.`],
   // alerts.py escalation triggers (console)
   [/^Declared medical need and estimated outage > (\d+) hrs$/, (h) => `Necesidad médica declarada y apagón estimado de más de ${h} h`],
   // planner storm names: "Feb 2025 storm"
@@ -172,12 +157,6 @@ export function toEs(text) {
     rest = parts.filter(Boolean).map(toEs).join(" ");
     return `Su riesgo de apagón es ${BAND[m[1]] ?? m[1]} (confianza ${CONF[m[2]]}). ${rest}`
       + (m[3].endsWith(OFFLINE_TAIL) ? " Es una estimación, no una hora de restauración confirmada por AEP." : "");
-  }
-  // A multi-sentence reply (the chat): translate sentence by sentence; unknown sentences stay as they are.
-  const sentences = text.match(/[^.!?]+(?:[.!?](?!\d)|$)+/g);
-  if (sentences && sentences.length > 1) {
-    const out = sentences.map((x) => x.trim()).filter(Boolean).map((x) => toEs(x));
-    if (out.join(" ") !== sentences.map((x) => x.trim()).filter(Boolean).join(" ")) return out.join(" ");
   }
   return text;
 }
