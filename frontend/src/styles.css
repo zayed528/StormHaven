@@ -10,6 +10,11 @@
   --tint-warn: #FFF4D6; --tint-flash: #FFE9A8; --tint-alert: #FBECEE; --tint-range: #DCE6F2;
   --safe-low: #EAF5EE; --safe-moderate: #FDF6E3; --safe-high: #FCEEE6; --safe-very-high: #FBECEE; --safe-unknown: #EEF1F4;
   --overlay: rgba(255, 255, 255, .92); --shadow: rgba(20, 33, 61, .25);
+  --glass: rgba(255, 255, 255, .72); --glass-strong: rgba(255, 255, 255, .9);   /* frosted panels over the map */
+  /* "liquid glass" storm toggles: see-through at rest, more solid on hover; bright edge + soft inner shine */
+  --lg-bg: rgba(255, 255, 255, .34); --lg-bg-hover: rgba(255, 255, 255, .62); --lg-edge: rgba(255, 255, 255, .7);
+  --lg-shine: rgba(255, 255, 255, .85); --lg-shade: rgba(20, 33, 61, .08); --lg-thumb: rgba(255, 255, 255, .92);
+  --lg-thumb-edge: rgba(20, 33, 61, .12);
   font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--bg); }
 :root[data-theme="dark"] { color-scheme: dark;
   --ink: #E6EDF5; --muted: #A3B1C2; --bg: #0F1623; --surface: #172131; --line: #2F3D52; --alert: #FF8A9B;
@@ -17,7 +22,11 @@
   --tint-info: #1A2840; --tint-info-line: #36507A; --tint-info-hover: #22345A; --tint-user: #22324A;
   --tint-warn: #3A3115; --tint-flash: #4A3D10; --tint-alert: #3A1A22; --tint-range: #2B3D58;
   --safe-low: #13281D; --safe-moderate: #2F2912; --safe-high: #33200F; --safe-very-high: #36171F; --safe-unknown: #1F2733;
-  --overlay: rgba(23, 33, 49, .92); --shadow: rgba(0, 0, 0, .55); }
+  --overlay: rgba(23, 33, 49, .92); --shadow: rgba(0, 0, 0, .55);
+  --glass: rgba(23, 33, 49, .72); --glass-strong: rgba(23, 33, 49, .92);
+  --lg-bg: rgba(23, 33, 49, .38); --lg-bg-hover: rgba(23, 33, 49, .7); --lg-edge: rgba(255, 255, 255, .18);
+  --lg-shine: rgba(255, 255, 255, .22); --lg-shade: rgba(0, 0, 0, .3); --lg-thumb: rgba(169, 193, 236, .28);
+  --lg-thumb-edge: rgba(169, 193, 236, .55); }
 body { background: var(--bg); }
 body { margin: 0; }
 .app { max-width: 1200px; margin: 0 auto; padding: 1.5rem; display: grid; gap: 1rem; }
@@ -266,3 +275,183 @@ input[type="range"] { accent-color: var(--fill); }
    With it, the map is clipped to the column and re-measures itself to the real width. */
 .view { grid-template-columns: minmax(0, 1fr); }
 .map { min-width: 0; overflow: hidden; }
+/* "Skip and explore the map" sits centered under the onboarding card, clear of the floating sun/moon switch. */
+.onboard-view > .link-button { justify-self: center; }
+
+/* ============================================================================================================
+   FULL-SCREEN MAP LAYOUT (customer view). Appended last on purpose: it overrides the older page layout above.
+   The map fills the window; everything else floats over it on frosted "glass" panels.
+   --chrome-h (header height) and --dock-h (answer cards height) are measured by App.jsx.
+   ============================================================================================================ */
+.app.full-map { max-width: none; margin: 0; padding: 0; display: block; }
+.customer[hidden] { display: none; }
+
+/* Header: frosted bar over the map. Title + tabs on the left, language + theme on the right; storm toggles below. */
+.full-map .topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 900; padding: .6rem 1.25rem .55rem;
+  padding-top: calc(.6rem + env(safe-area-inset-top, 0px)); background: var(--glass);
+  backdrop-filter: blur(12px) saturate(1.2); -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  border-bottom: 1px solid var(--line); box-shadow: 0 2px 12px var(--shadow); }
+.topbar .header-row { display: flex; align-items: center; gap: .75rem 1.25rem; flex-wrap: wrap; }
+.topbar h1 { margin: 0; font-size: 1.45rem; }
+.topbar .view-tabs { margin: 0; }
+.topbar .header-actions { margin-left: auto; align-items: center; }
+.topbar .banner { margin: .4rem 0 0; }
+
+/* Theme switch now lives in the header: a small horizontal pill (was a floating bottom-left button). */
+.topbar .theme-switch { position: static; flex-direction: row; padding: 3px; gap: 2px; box-shadow: none;
+  left: auto; bottom: auto; }
+.topbar .theme-switch button { width: 34px; height: 34px; }
+
+/* Storm level toggles under the header */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1rem; margin-top: .5rem; }
+.storm-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .75rem; min-width: 0; }
+.storm-bar-label { font-weight: 600; font-size: .92rem; }
+.storm-toggles { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden;
+  background: var(--surface); }
+.storm-toggles button { padding: .38rem .85rem; font: inherit; font-size: .88rem; border: none; background: transparent;
+  color: var(--ink); cursor: pointer; white-space: nowrap; transition: background-color .2s ease, color .2s ease; }
+.storm-toggles button + button { border-left: 1px solid var(--line); }
+.storm-toggles button:hover:not([aria-pressed="true"]) { background: var(--tint-info); }
+.storm-toggles button[aria-pressed="true"] { background: var(--fill); color: var(--on-fill); font-weight: 700; }
+/* a dot in each level's band color, so the toggles read like the map legend */
+.storm-toggles button::before { content: ""; display: inline-block; width: .55rem; height: .55rem; border-radius: 50%;
+  margin-right: .4rem; vertical-align: middle; background: #4C9F70; }
+.storm-toggles .lvl-1::before { background: #E3B23C; } .storm-toggles .lvl-2::before { background: #D9682B; }
+.storm-toggles .lvl-3::before { background: #A4243B; }
+.storm-note { font-size: .82rem; max-width: 46ch; }
+.toolbar-btn { margin-left: auto; padding: .38rem .9rem; font: inherit; font-size: .88rem; border: 1px solid var(--line);
+  border-radius: 999px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.toolbar-btn:hover { background: var(--tint-info); }
+
+/* The map fills the window, under everything */
+.map.map-full { position: fixed; inset: 0; height: auto; border: none; z-index: 0; }
+.full-map .map-tools { top: calc(var(--chrome-h, 110px) + .6rem); right: .9rem; }
+
+/* First visit: translucent premise-ID panel over the map */
+.onboard-overlay { position: fixed; z-index: 850; left: 0; right: 0; top: var(--chrome-h, 110px); bottom: 0;
+  overflow-y: auto; display: grid; justify-items: center; align-content: start; gap: .6rem; padding: 1.5rem 1rem 2rem;
+  pointer-events: none; }
+.onboard-overlay > * { pointer-events: auto; }
+.onboard-overlay .ob-card, .onboard-overlay .onboard { background: var(--glass); border-radius: 14px;
+  backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 12px 40px var(--shadow); animation: panel-in .45s cubic-bezier(.2, .8, .2, 1) both; }
+.onboard-overlay .onboarding { padding: 0; }
+.onboard-overlay > .link-button { padding: .35rem .8rem; border-radius: 999px; background: var(--glass-strong);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+@keyframes panel-in { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+
+/* Error message floats just under the header */
+.error.toast { position: fixed; z-index: 950; top: calc(var(--chrome-h, 110px) + .6rem); left: 50%; transform: translateX(-50%);
+  margin: 0; padding: .5rem .9rem; background: var(--surface); border: 1px solid var(--alert); border-radius: 8px;
+  box-shadow: 0 4px 14px var(--shadow); max-width: calc(100vw - 2rem); }
+
+/* Answer: safety strip + three cards side by side along the bottom, sliding in from the left one after another.
+   Left edge leaves room for the chat robot in the bottom-left corner. */
+.dock { position: fixed; z-index: 800; left: calc(2.25rem + 60px + env(safe-area-inset-left, 0px)); right: 1rem;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); display: grid; gap: .55rem; pointer-events: none; }
+.dock > * { pointer-events: auto; }
+.dock .safety { margin: 0; border-radius: 10px; padding: .45rem .8rem; box-shadow: 0 4px 14px var(--shadow);
+  animation: card-in .5s cubic-bezier(.2, .8, .2, 1) both; }
+.dock .safety summary { cursor: pointer; }
+.dock .safety ul { margin: .4rem 0 .1rem; }
+.dock .safety-intro { margin: 0; display: inline; font-size: .92rem; }
+.dock .cols { grid-template-columns: 1fr 1.45fr 1.2fr; gap: .7rem; align-items: end; }
+.dock .card { max-height: min(46vh, 520px); overflow-y: auto; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--glass-strong); backdrop-filter: blur(12px) saturate(1.2); -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  box-shadow: 0 8px 28px var(--shadow); animation: card-in .55s cubic-bezier(.2, .8, .2, 1) both;
+  animation-delay: calc(var(--i, 0) * 120ms + 80ms); }
+@keyframes card-in { from { opacity: 0; transform: translateX(-110vw); } to { opacity: 1; transform: none; } }
+.dock-close { position: absolute; right: 0; top: -2.9rem; width: 2.3rem; height: 2.3rem; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--glass-strong); color: var(--ink); font-size: 1.4rem; line-height: 1;
+  cursor: pointer; box-shadow: 0 4px 14px var(--shadow); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.dock-close:hover { background: var(--tint-info); }
+/* needs + demo toggle inside the cards */
+.needs-picker { margin: 0 0 .5rem; border: 1px solid var(--line); border-radius: 8px; padding: .35rem .6rem; }
+.needs-picker summary { cursor: pointer; font-size: .88rem; font-weight: 600; }
+.needs-count { color: var(--accent); }
+.needs-list { display: grid; gap: .2rem; margin-top: .4rem; font-size: .9rem; }
+.demo-toggle { margin-top: .6rem; font-size: .88rem; align-items: flex-start; }
+
+/* Chat robot bottom-left; its window opens above it, growing from that corner */
+.chat-launcher { left: calc(1.25rem + env(safe-area-inset-left, 0px)); right: auto; }
+.chat { left: calc(1.25rem + env(safe-area-inset-left, 0px)); right: auto; }
+.chat:not([hidden]) { transform-origin: bottom left; }
+.chat-launcher[aria-expanded="true"] { transform: rotate(10deg) scale(.96); }
+
+/* Phones: header wraps; the cards become one swipeable row across the bottom; the robot sits just above them. */
+@media (max-width: 760px) {
+  /* compact header: title + switches on one row, small tabs, storm toggles scroll sideways */
+  .full-map .topbar { padding: .4rem .6rem .4rem; padding-top: calc(.4rem + env(safe-area-inset-top, 0px)); }
+  .topbar .header-row { gap: .35rem .5rem; }
+  .topbar h1 { font-size: 1.15rem; }
+  .topbar .view-tabs { order: 3; width: 100%; gap: .3rem; }
+  .topbar .view-tabs button { min-height: 32px; padding: .2rem .6rem; font-size: .8rem; flex: 1; }
+  .topbar .header-actions { margin-left: auto; gap: .3rem; }
+  .topbar .lang-switch button { min-height: 32px; padding: .2rem .55rem; font-size: .8rem; }
+  .topbar .theme-switch button { width: 30px; height: 30px; }
+  .toolbar { margin-top: .35rem; gap: .35rem; flex-wrap: nowrap; }
+  .storm-bar { flex: 1; min-width: 0; }
+  .storm-bar-label, .storm-note { display: none; }
+  .storm-toggles { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .storm-toggles button { padding: .35rem .55rem; font-size: .78rem; min-height: 32px; }
+  .storm-toggles button::before { display: none; }
+  .toolbar-btn { padding: .3rem .6rem; font-size: .78rem; min-height: 32px; white-space: nowrap; }
+  /* shorter cards in one swipeable row; the estimate card comes first on a small screen */
+  .dock { left: .5rem; right: .5rem; bottom: calc(.5rem + env(safe-area-inset-bottom, 0px)); gap: .4rem; }
+  .dock .safety { padding: .35rem .6rem; font-size: .9rem; }
+  .dock .safety-intro { display: none; }
+  .dock .cols { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: .5rem; padding-bottom: .2rem; }
+  .dock .card { flex: 0 0 86%; scroll-snap-align: start; max-height: 36vh; padding: .75rem; }
+  .dock .cols { align-items: stretch; }        /* all cards the same height: no gaps of map between them */
+  .dock-close { top: -2.7rem; }
+  .has-dock .chat-launcher { bottom: calc(var(--dock-h, 50vh) + 1rem + env(safe-area-inset-bottom, 0px)); }
+  .chat { left: .5rem; right: .5rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock .card, .dock .safety, .onboard-overlay .ob-card, .onboard-overlay .onboard { animation: none; }
+}
+
+/* ============================================================================================================
+   LIQUID-GLASS STORM TOGGLES (floating, centered under the header) + a slimmer header. Appended last: overrides the
+   earlier storm-bar / toolbar rules.
+   ============================================================================================================ */
+.full-map .topbar { padding: .45rem 1.25rem; padding-top: calc(.45rem + env(safe-area-inset-top, 0px)); }
+.topbar .toolbar-btn { margin-left: 0; }
+
+.storm-float { position: fixed; z-index: 890; left: 50%; transform: translateX(-50%);
+  top: calc(var(--header-h, 58px) + .6rem); max-width: calc(100vw - 1.5rem); }
+.storm-bar { display: flex; align-items: center; gap: .5rem; padding: .3rem .35rem .3rem .9rem; border-radius: 999px;
+  background: var(--lg-bg); border: 1px solid var(--lg-edge);
+  backdrop-filter: blur(18px) saturate(1.8); -webkit-backdrop-filter: blur(18px) saturate(1.8);
+  /* the "liquid" look: a bright top edge, a faint darker bottom edge, a soft drop shadow */
+  box-shadow: inset 0 1px 0 var(--lg-shine), inset 0 -1px 0 var(--lg-shade), 0 10px 30px var(--shadow);
+  transition: background-color .3s ease, box-shadow .3s ease, transform .3s ease; }
+.storm-bar:hover, .storm-bar:has(:focus-visible) { background: var(--lg-bg-hover);
+  box-shadow: inset 0 1px 0 var(--lg-shine), inset 0 -1px 0 var(--lg-shade), 0 14px 38px var(--shadow);
+  transform: translateY(-1px); }
+.storm-bar-label { font-size: .85rem; font-weight: 700; white-space: nowrap; }
+.storm-toggles { position: relative; display: flex; border: none; border-radius: 999px; background: transparent;
+  overflow: visible; }
+/* the glass thumb behind the chosen level; glides (with a little spring) when the level changes */
+.storm-thumb { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 999px; background: var(--lg-thumb);
+  border: 1px solid var(--lg-thumb-edge);
+  box-shadow: inset 0 1px 0 var(--lg-shine), 0 4px 14px var(--shadow);
+  transition: transform .45s cubic-bezier(.34, 1.4, .5, 1), width .45s cubic-bezier(.34, 1.4, .5, 1); }
+.storm-toggles button { position: relative; z-index: 1; padding: .42rem .9rem; font: inherit; font-size: .88rem;
+  border: none; border-radius: 999px; background: transparent; color: var(--ink); cursor: pointer; white-space: nowrap;
+  transition: transform .15s ease, font-weight .2s ease; }
+.storm-toggles button + button { border-left: none; }
+.storm-toggles button:hover:not([aria-pressed="true"]) { background: transparent; transform: translateY(-1px); }
+.storm-toggles button:active { transform: scale(.96); }
+.storm-toggles button[aria-pressed="true"] { background: transparent; color: var(--ink); font-weight: 700; }
+
+@media (max-width: 760px) {
+  .full-map .topbar { padding: .4rem .6rem; padding-top: calc(.4rem + env(safe-area-inset-top, 0px)); }
+  .storm-float { top: calc(var(--header-h, 96px) + .4rem); width: calc(100vw - 1rem); }
+  .storm-bar { padding: .25rem; overflow-x: auto; scrollbar-width: none; }
+  .storm-bar-label { display: none; }
+  .storm-toggles button { padding: .38rem .6rem; font-size: .78rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .storm-thumb, .storm-bar, .storm-toggles button { transition: none; }
+}

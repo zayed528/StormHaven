@@ -1,9 +1,11 @@
-// Safety banner + the three columns the challenge asks for:
-// Demo utility status / Our estimate (model) / What you can do (+ alerts).   Owner: Abby
-import React, { useState } from "react";
+// The answer for one home, floating over the full-screen map: a safety strip + the three cards the challenge asks for,
+// Demo utility status / Our estimate (model) / What you can do (+ alerts), side by side along the bottom. The cards
+// slide in from the left one after another when a home is chosen (App remounts this per home).   Owner: Nandan
+import React, { useEffect, useState } from "react";
 import { sendNotify } from "../api/client.js";
 import { fmtRange } from "../i18n.js";
 import { BAND_COLORS } from "./OutageMap.jsx";
+import { DemoToggle, NeedsPicker } from "./ScenarioControls.jsx";
 import StepTimeline from "./StepTimeline.jsx";
 
 // Safety banner color class per risk band (colors match the map dots). Unknown = location not matched.
@@ -31,7 +33,14 @@ function SendButton({ t, messageKey, request, eligible }) {
   );
 }
 
-export default function ResultsPanel({ t, result, changes, notifyRequest }) {
+// controls = { needs, onToggleNeed, enrolled, onEnrolled, utilityConfirmed, onUtilityConfirmed } (state lives in App)
+export default function ResultsPanel({ t, result, changes, notifyRequest, controls, onClose }) {
+  // Esc closes the cards (the map stays; clicking a home opens them again).
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape" && !e.defaultPrevented && !document.querySelector(".chat:not([hidden])")) onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   const { risk, restoration, guidance, alerts } = result;
   const fallback = risk.source === "fallback";     // location not matched: show the fallback, never numbers
   const trust = [...risk.trust.assumptions, ...restoration.trust.assumptions];
@@ -41,30 +50,26 @@ export default function ResultsPanel({ t, result, changes, notifyRequest }) {
   // "What changed": `key` changes with each update so the flash animation replays.
   const flash = (on) => (on ? " changed" : "");
   const k = changes?.stamp ?? 0;
+  // Phone layout (decided once per home; App remounts this component for each home).
+  const [narrow] = useState(() => window.matchMedia?.("(max-width: 760px)").matches ?? false);
 
-  return (
-    // tabIndex -1: App moves focus here after a keyboard lookup, so screen readers start at the answer.
-    <section className="results" id="results" tabIndex={-1} aria-label={t.resultsAria}>
-      {/* Safety first, visually separate, announced to screen readers via role="alert". */}
-      {guidance.safety.length > 0 && (
-        <div className={`safety ${BAND_CLASS[risk.band] ?? "unknown"}`} role="alert"><strong>⚠ {sb.title}</strong>
-          <p className="safety-intro">{sb.text}</p>
-          <ul>{guidance.safety.map((s, i) => <li key={i}>{s.text}</li>)}</ul></div>)}
-
-      {t.engineNote && <p className="muted engine-note">{t.engineNote}</p>}
-
-      <div className="cols">
-        {/* Column 1: explicit demo toggle, never represented as a live AEP feed. */}
-        <article><h2>{t.confirmedTitle}</h2>
+  // The three cards, built by position i (sets the slide-in stagger). Order: on a phone the estimate comes first,
+  // since only one card is visible at a time in the swipeable row.
+  const cards = {
+        // Card 1: utility status. Only the explicit demo toggle fills it; never represented as a live AEP feed.
+    status: (i) => (
+        <article key="status" className="card" style={{ "--i": i }}><h2>{t.confirmedTitle}</h2>
           {restoration.outage_confirmed ? (
             <><p><strong>{t.outageConfirmed}</strong></p>
               {restoration.confirmed_etr && <p>{restoration.confirmed_etr}</p>}
               <p className="muted">{t.utilitySource}</p></>
           ) : <p>{t.noOutage}</p>}
-        </article>
+          <DemoToggle t={t} utilityConfirmed={controls.utilityConfirmed} onUtilityConfirmed={controls.onUtilityConfirmed} />
+        </article>),
 
-        {/* Column 2: everything the model estimated, labeled as such, with its assumptions and limits. */}
-        <article><h2>{t.estimateTitle} <span className="tag">{t.modelEstimate}</span></h2>
+        // Card 2: everything the model estimated, labeled as such, with its assumptions and limits.
+    estimate: (i) => (
+        <article key="estimate" className="card" style={{ "--i": i }}><h2>{t.estimateTitle} <span className="tag">{t.modelEstimate}</span></h2>
           {fallback ? (
             <p><strong>{t.fallback}</strong> {t.fallbackMore} {risk.trust.could_change_if.map(t.tr).join(" ")}</p>
           ) : (<>
@@ -85,10 +90,13 @@ export default function ResultsPanel({ t, result, changes, notifyRequest }) {
             <h4>{t.couldChange}</h4>
             <ul>{risk.trust.could_change_if.map((c, i) => <li key={`c${i}`}>{t.tr(c)}</li>)}</ul>
           </details>
-        </article>
+        </article>),
 
-        {/* Column 3: what the customer can do, plus alerts. */}
-        <article><h2>{t.canDo}</h2>
+        // Card 3: what the customer can do (changes with the needs they choose to declare here), plus alerts.
+    todo: (i) => (
+        <article key="todo" className="card" style={{ "--i": i }}><h2>{t.canDo}</h2>
+          <NeedsPicker t={t} needs={controls.needs} onToggleNeed={controls.onToggleNeed}
+            enrolled={controls.enrolled} onEnrolled={controls.onEnrolled} />
           <ul>{guidance.actions.map((a, i) => (
             <li key={i}>{a.text}{a.reason && <span className="muted"> ({a.reason})</span>}</li>))}</ul>
           <h3>{t.alerts}</h3>
@@ -104,7 +112,23 @@ export default function ResultsPanel({ t, result, changes, notifyRequest }) {
                 <SendButton key={m} t={t} messageKey={key} request={notifyRequest} eligible={alerts.eligible} />
               </figure>))}
           </details>
-        </article>
+        </article>),
+  };
+  const order = narrow ? ["estimate", "status", "todo"] : ["status", "estimate", "todo"];
+
+  return (
+    // tabIndex -1: App moves focus here after a keyboard lookup, so screen readers start at the answer.
+    <section className="results dock" id="results" tabIndex={-1} aria-label={t.resultsAria}>
+      <button type="button" className="dock-close" onClick={onClose} aria-label={t.closeResults} title={t.closeResults}>×</button>
+      {/* Safety first, visually separate, announced to screen readers via role="alert". */}
+      {guidance.safety.length > 0 && (
+        <div className={`safety ${BAND_CLASS[risk.band] ?? "unknown"}`} role="alert">
+          <details><summary><strong>⚠ {sb.title}</strong> <span className="safety-intro">{sb.text}</span></summary>
+            <ul>{guidance.safety.map((s, i) => <li key={i}>{s.text}</li>)}</ul></details></div>)}
+
+      {t.engineNote && <p className="muted engine-note">{t.engineNote}</p>}
+
+      <div className="cols">{order.map((name, i) => cards[name](i))}
       </div>
     </section>
   );

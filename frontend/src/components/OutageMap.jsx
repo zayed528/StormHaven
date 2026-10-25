@@ -2,7 +2,7 @@
 // and the free "carto-positron" (light theme) / "carto-darkmatter" (dark theme) basemaps.
 // Two views (toggle in the map's top-right corner): risk dots, or risk dots over a heatmap of where homes are
 // likely to lose power. The dots stay visible and clickable in both, so you always see where the homes are.
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import createPlotlyComponent from "react-plotly.js/factory";
 import Plotly from "plotly.js-dist-min";
 
@@ -26,15 +26,31 @@ const MAP_THEME = {
   dark: { style: "carto-darkmatter", line: "#7D8EA3", faintLine: "rgba(163,177,194,0.22)", halo: "#DCE4EE",
           ring: "#FFFFFF", legendBg: "rgba(23,33,49,0.88)", text: "#E6EDF5", paper: "#0F1623" },
 };
+// Map center that puts `focus` offsetPx above the middle of the screen. Web-map scale: ~78,272 m per pixel at zoom 0
+// (512-px tiles), halving with each zoom level and shrinking with latitude; 111,320 m per degree of latitude.
+const aimAt = (f) => {
+  const metersPerPx = (78271.517 * Math.cos((f.lat * Math.PI) / 180)) / 2 ** f.zoom;
+  return { lat: f.lat - ((f.offsetPx ?? 0) * metersPerPx) / 111320, lon: f.lon };
+};
 const HEAT_COLORS = [[0, "rgba(76,159,112,0)"], [0.08, "rgba(76,159,112,0.45)"], [0.3, "rgba(227,178,60,0.75)"],
                      [0.6, "rgba(217,104,43,0.85)"], [1, "rgba(164,36,59,0.95)"]];
 
 // Props: layers = GET /api/map response, selectedId = chosen premise, onSelect(id) = click handler, t = UI text (i18n.js),
-// focus = {lat, lon, zoom, key} to zoom to the customer's neighborhood (null = whole territory).
-export default function OutageMap({ t, dark = false, layers, focus = null, selectedId, onSelect }) {
+// focus = {lat, lon, zoom, offsetPx, key} to zoom to the customer's neighborhood (null = whole territory); offsetPx
+// shows the home that many pixels above the middle of the screen, in the gap between the header and the answer cards.
+// topInset = px covered by the app's header at the top of the map (the legend goes just below the map tools).
+export default function OutageMap({ t, dark = false, layers, focus = null, topInset = 0, selectedId, onSelect }) {
   const c = dark ? MAP_THEME.dark : MAP_THEME.light;
   const [mode, setMode] = useState("dots");        // "dots" | "heat"
   const heat = mode === "heat";
+  // Zooming to the customer's home is an animated camera flight on the underlying MapLibre map, not a layout change:
+  // changing Plotly's layout redraws every layer and then jumps, which looked laggy.
+  const gd = useRef(null);                         // Plotly graph div
+  const [ready, setReady] = useState(false);
+  const flown = useRef(false);                     // true while zoomed in on a home (so clearing focus flies back out)
+  // The camera after every move (fly-to, pan, zoom, right-drag tilt). New map data re-renders the layout, and Plotly
+  // would otherwise put the camera back to the starting view, so the layout always carries the current camera.
+  const camera = useRef(null);
   // All circuits' line coordinates joined into one list (null between circuits). Only changes with new map data.
   const lineCoords = useMemo(() => ({
     lat: layers ? layers.circuits.flatMap((k) => [...k.lat, null]) : [],
@@ -103,22 +119,57 @@ export default function OutageMap({ t, dark = false, layers, focus = null, selec
     return { center: { lat: (minLat + maxLat) / 2, lon: (minLon + maxLon) / 2 }, zoom };
   }, [layers]);
 
+  // Fly to the customer's home (or back out to the whole territory when the focus is cleared): one smooth zoom-and-pan.
+  // Plotly keeps the camera afterwards because uirevision doesn't change. Reduced-motion users get an instant jump.
+  useEffect(() => {
+    const sub = gd.current?._fullLayout?.map?._subplot;          // Plotly's map subplot
+    const m = sub?.map;                                          // the MapLibre map inside it
+    if (!ready || !m) return;
+    let target = null;
+    if (focus) { const a = aimAt(focus); target = { center: [a.lon, a.lat], zoom: focus.zoom }; flown.current = true; }
+    else if (flown.current) { target = { center: [view.center.lon, view.center.lat], zoom: view.zoom }; flown.current = false; }
+    if (!target) return;
+    // Plotly re-applies the layout camera on every redraw (results arriving, the home marker appearing) unless the map
+    // is being dragged, which would cancel or snap the flight. So the flight counts as a drag until it lands, and the
+    // destination becomes the layout camera for every redraw after that.
+    camera.current = { center: { lat: target.center[1], lon: target.center[0] }, zoom: target.zoom, pitch: 0, bearing: 0 };
+    sub.dragging = true;
+    m.once("moveend", () => { sub.dragging = false; });
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) m.jumpTo(target);
+    else m.flyTo({ ...target, duration: 2200, curve: 1.4, essential: true });
+  }, [focus?.key, ready]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Remember the camera whenever it stops moving. The MapLibre map appears a moment after Plotly reports "initialized",
+  // so this checks after every render and attaches its listener once per map.
+  useEffect(() => {
+    const m = gd.current?._fullLayout?.map?._subplot?.map;
+    if (!m || m.__stormhavenCamera) return;
+    m.__stormhavenCamera = true;
+    m.on("moveend", () => { const ctr = m.getCenter();
+      camera.current = { center: { lat: ctr.lat, lon: ctr.lng }, zoom: m.getZoom(), pitch: m.getPitch(), bearing: m.getBearing() }; });
+  });
+
   return (<>
     <Plot
       data={traces}
       layout={{
-        map: { style: c.style, center: focus ? { lat: focus.lat, lon: focus.lon } : view.center,
-               zoom: focus ? focus.zoom : view.zoom },
+        // The current camera if the map has moved, else the starting view (whole territory). Zooming to a home flies
+        // the camera (see the effect above) rather than changing these values.
+        map: { style: c.style, ...(camera.current ?? { center: view.center, zoom: view.zoom }) },
         paper_bgcolor: c.paper,
         margin: { l: 0, r: 0, t: 0, b: 0 },
-        legend: { x: 0.01, y: 0.99, bgcolor: c.legendBg, font: { color: c.text }, title: { text: t.mapLegend, font: { color: c.text } } },
-        // Keep the user's pan/zoom across updates; a new focus (a new key) re-centers the map on purpose.
-        uirevision: focus?.key ?? "overview",
+        // Top-right, under the header and the Risk dots / Heatmap switch (and the heat legend when it shows).
+        legend: { x: 0.99, xanchor: "right", yanchor: "top",
+          y: topInset ? Math.max(0.3, 1 - (topInset + (heat ? 92 : 58)) / window.innerHeight) : 0.99, bgcolor: c.legendBg, font: { color: c.text }, title: { text: t.mapLegend, font: { color: c.text } } },
+        // Keep the camera (user pans and fly-tos) across data updates.
+        uirevision: "overview",
       }}
       config={{ displayModeBar: false, scrollZoom: true, responsive: true }}
       style={{ width: "100%", height: "100%" }}
       // Clicking a premise marker reports its id (stored in customdata); lines carry no customdata.
       onClick={(e) => { const id = e.points?.[0]?.customdata; if (id) onSelect(id); }}
+      onInitialized={(_, div) => { gd.current = div; setReady(true); }}
+      onUpdate={(_, div) => { gd.current = div; }}
     />
     {/* View switch, over the map's top-right corner. Visual only: the answer and its text don't change. */}
     <div className="map-tools">

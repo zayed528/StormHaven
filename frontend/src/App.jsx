@@ -1,4 +1,7 @@
-// StormHaven: map-first storm outage concierge. State lives here; components render.   Owner: Nandan (was Abby)
+// StormHaven: map-first storm outage concierge. State lives here; components render.   Owner: Nandan
+// Layout (customer view): a full-screen map; a frosted header (title, tabs, language, theme) with the storm-level
+// toggles under it; first visit = a translucent premise-ID panel over the map; choosing a home zooms in and slides
+// three answer cards in from the left along the bottom; chat robot bottom-left.
 import React, { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import OutageMap from "./components/OutageMap.jsx";
@@ -7,7 +10,7 @@ import ResultsPanel from "./components/ResultsPanel.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
 import Console from "./console/Console.jsx";          // Abby's utility console (fetches its own data)
 import OnboardingStandIn from "./components/OnboardingStandIn.jsx";
-import { getConcierge, getHealth, getMap, getWeather } from "./api/client.js";
+import { getConcierge, getHealth, getMap } from "./api/client.js";
 import { STRINGS, fmtRange } from "./i18n.js";
 
 // Onboarding (first screen): Abby's onboarding/Onboarding.jsx as soon as that file exists, else the stand-in.
@@ -42,9 +45,7 @@ const MoonIcon = () => (
 export default function App() {
   const [layers, setLayers] = useState(null);
   const [health, setHealth] = useState(null);
-  const [weather, setWeather] = useState(null);
   const [premise, setPremise] = useState(null);
-  const [typed, setTyped] = useState("");
   const [scenario, setScenario] = useState({ severity_percentile: 97, crews_available: 20, road_access: "normal", extra_damage: [] });
   const [needs, setNeeds] = useState([]);
   const [enrolled, setEnrolled] = useState(true);
@@ -56,7 +57,11 @@ export default function App() {
   const [changes, setChanges] = useState(null);    // what moved vs. the previous answer, for the highlight
   const [error, setError] = useState(null);
   const [onboarding, setOnboarding] = useState(true);   // first screen until the customer finishes (or skips) it
-  const [focus, setFocus] = useState(null);            // {lat, lon, zoom, key}: zoom the map to the customer's area
+  const [focus, setFocus] = useState(null);            // {lat, lon, zoom, offsetPx, key}: zoom to the customer's area
+  const [dockOpen, setDockOpen] = useState(true);      // the answer cards (closed with x / Esc; a new home reopens them)
+  const headerRef = useRef(null);
+  const stormRef = useRef(null);                     // the floating storm toggles under the header
+  const [chromeH, setChromeH] = useState(0);         // px covered at the top: header + storm toggles (the map draws under)
   const t = STRINGS[lang];
   // The last answer shown for THIS location: its range + the scenario behind it. Sent back so the
   // "estimate updated" message can say old -> new and give the real reason. Refs (not state) because
@@ -101,8 +106,6 @@ export default function App() {
 
   // Once on load: find out whether we're on synthetic data (shows the banner).
   useEffect(() => { getHealth().then(setHealth).catch(() => {}); }, []);
-  // Weather reference storms label the storm slider ("Similar to the Feb 2025 storm..."). Optional: failures are ignored.
-  useEffect(() => { getWeather().then(setWeather).catch(() => {}); }, []);
 
   // Language switch: tell screen readers / the browser, and forget the last answer. range_short is localized
   // ("6-24 hours" vs "6-24 horas"), so comparing across languages would fake an "estimate updated" message.
@@ -113,16 +116,45 @@ export default function App() {
   }, [lang]);
 
   // Plotly measures its box while hidden as 0 px; nudge it to re-measure when the customer view comes back.
+  useEffect(() => { if (view === "customer") setTimeout(() => window.dispatchEvent(new Event("resize")), 50); }, [view]);
+
+  // How far down the top chrome reaches (header, plus the floating storm toggles in the customer view). Published as
+  // --chrome-h so the map tools, onboarding panel and error toast sit below it.
+  const chromeBottom = () => Math.ceil(Math.max(headerRef.current?.getBoundingClientRect().bottom ?? 0,
+                                                stormRef.current?.getBoundingClientRect().bottom ?? 0));
   useEffect(() => {
-    if (view === "customer" && !onboarding) setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
-  }, [view, onboarding]);
+    if (!window.ResizeObserver) return;
+    const update = () => {
+      // --header-h first: the storm toggles are placed by it, and chromeBottom() then measures where they end.
+      document.documentElement.style.setProperty("--header-h", `${headerRef.current?.offsetHeight ?? 0}px`);
+      const h = chromeBottom();
+      document.documentElement.style.setProperty("--chrome-h", `${h}px`);
+      setChromeH(h);
+    };
+    const ro = new ResizeObserver(update);
+    [headerRef.current, stormRef.current].forEach((el) => el && ro.observe(el));
+    update();
+    return () => ro.disconnect();
+  }, [view]);
+
+  // Where to aim the map so the customer's home lands in the visible gap between the header and the answer cards
+  // (pixels to shift the home up from the screen's middle). The cards take roughly the bottom half.
+  const homeOffsetPx = () => {
+    const h = window.innerHeight, chrome = chromeBottom();
+    const cards = window.innerWidth <= 760 ? h * 0.45 : Math.min(h * 0.5, 600);
+    return Math.max(0, (cards - chrome) / 2);
+  };
+  const zoomTo = (lat, lon, zoom) => setFocus({ lat, lon, zoom, offsetPx: homeOffsetPx(), key: Date.now() });
+
+  // A home was chosen (map click or onboarding): show its answer cards again if they were closed.
+  const selectHome = (id) => { setPremise(id); setDockOpen(true); };
 
   // Zoom to the customer's neighborhood once their answer names the map dot (when no zoom target was given).
   useEffect(() => {
     if (!zoomToResult.current || !result?.map_point_id || !layers) return;
     const dot = layers.premises.find((p) => p.id === result.map_point_id);
     zoomToResult.current = false;
-    if (dot) setFocus({ lat: dot.lat, lon: dot.lon, zoom: NEIGHBORHOOD_ZOOM, key: Date.now() });
+    if (dot) zoomTo(dot.lat, dot.lon, NEIGHBORHOOD_ZOOM);
   }, [result, layers]);
 
   // Onboarding finished (contract: onboarding/Onboarding.jsx). Feed it into the state the app already has.
@@ -130,16 +162,15 @@ export default function App() {
     if (p.language === "en" || p.language === "es") setLang(p.language);
     setNeeds(p.declared_needs ?? []);
     setEnrolled(!!p.alerts_enrolled);
-    setTyped(p.premise_id);
-    setPremise(p.premise_id);
-    if (p.center) setFocus({ lat: p.center.lat, lon: p.center.lon, zoom: p.zoom ?? NEIGHBORHOOD_ZOOM, key: Date.now() });
+    selectHome(p.premise_id);
+    if (p.center) zoomTo(p.center.lat, p.center.lon, p.zoom ?? NEIGHBORHOOD_ZOOM);
     else zoomToResult.current = true;
     focusResults.current = true;
     setOnboarding(false);
   };
-  // "Start over": back to onboarding with a clean slate and the whole-territory map.
+  // "Change home": back to the premise-ID panel with a clean slate and the whole-territory map.
   const restart = () => {
-    setPremise(null); setResult(null); setChanges(null); setTyped(""); setFocus(null);
+    setPremise(null); setResult(null); setChanges(null); setFocus(null);
     last.current = { premise: null, range: null, scenario: null, result: null };
     setOnboarding(true);
   };
@@ -185,77 +216,81 @@ export default function App() {
     changes.range && t.changedRange(fmtRange(changes.range, t), fmtRange(result.restoration, t)),
   ].filter(Boolean).join("; ")) : "";
 
+  const showDock = !onboarding && !!result && dockOpen;
+  // Publish the answer cards' height (--dock-h): on phones the chat robot sits just above them.
+  useEffect(() => {
+    const el = showDock && document.getElementById("results");
+    if (!el || !window.ResizeObserver) return;
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty("--dock-h", `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [showDock, premise]);
+
   return (
-    <div className="app">
-      {/* First Tab stop: the map can't be used from a keyboard, so jump straight to the premise ID box. */}
-      {!onboarding && <a className="skip-link" href="#premise-id">{t.skipToLookup}</a>}
-      <header>
+    <div className={`app${view === "customer" ? " full-map" : ""}${showDock ? " has-dock" : ""}`}>
+      {/* First Tab stop when the answer is showing: the map can't be used from a keyboard, so jump to the answer. */}
+      {showDock && <a className="skip-link" href="#results">{t.skipToResults}</a>}
+      <header className="topbar" ref={headerRef}>
         <div className="header-row">
           <h1>StormHaven</h1>
+          <nav className="view-tabs" aria-label={t.viewsAria}>
+            <button type="button" aria-pressed={view === "customer"} onClick={() => setView("customer")}>{t.tabCustomer}</button>
+            <button type="button" aria-pressed={view === "console"} onClick={() => setView("console")}>{t.tabConsole}</button>
+          </nav>
           <div className="header-actions">
+            {view === "customer" && !onboarding && (
+              <button type="button" className="toolbar-btn" onClick={restart}>{t.changeHome}</button>)}
             {/* Both options always visible; the current one is filled in (and aria-pressed for screen readers). */}
             <div className="lang-switch" role="group" aria-label={t.languageAria}>
               {[["en", "English"], ["es", "Español"]].map(([code, label]) => (
                 <button key={code} type="button" lang={code} aria-pressed={lang === code} onClick={() => setLang(code)}>
                   {lang === code && <span aria-hidden="true">✓ </span>}{label}</button>))}
             </div>
+            {/* Light/Dark: icons only on screen; aria-label + aria-pressed tell screen readers which is which and which is on. */}
+            <div className="theme-switch" role="group" aria-label={t.themeAria}>
+              {[["light", <SunIcon />, t.themeLight], ["dark", <MoonIcon />, t.themeDark]].map(([code, icon, label]) => (
+                <button key={code} type="button" aria-pressed={theme === code} aria-label={label} title={label}
+                  onClick={(e) => switchTheme(code, e)}>{icon}</button>))}
+            </div>
           </div>
         </div>
-        {/* Light/Dark switch: floats in the bottom-left corner (the chat robot has the bottom-right). Icons only on
-            screen; aria-label + aria-pressed tell screen readers which is which and which is on. */}
-        <div className="theme-switch" role="group" aria-label={t.themeAria}>
-          {[["light", <SunIcon />, t.themeLight], ["dark", <MoonIcon />, t.themeDark]].map(([code, icon, label]) => (
-            <button key={code} type="button" aria-pressed={theme === code} aria-label={label} title={label}
-              onClick={(e) => switchTheme(code, e)}>{icon}</button>))}
-        </div>
-        <nav className="view-tabs" aria-label={t.viewsAria}>
-          <button type="button" aria-pressed={view === "customer"} onClick={() => setView("customer")}>{t.tabCustomer}</button>
-          <button type="button" aria-pressed={view === "console"} onClick={() => setView("console")}>{t.tabConsole}</button>
-        </nav>
-        {view === "customer" && !onboarding && (
-          <p>{t.intro} <button type="button" className="link-button" onClick={restart}>{t.onboardRestart}</button></p>)}
         {health?.synthetic_data && <p className="banner">{t.synthetic}</p>}
       </header>
 
-      {view === "customer" && onboarding && (
-        <main className="view onboard-view">
-          <Onboarding t={t} onComplete={onboarded} />
-          <button type="button" className="link-button" onClick={() => setOnboarding(false)}>{t.onboardSkip}</button>
-        </main>)}
+      {/* Storm level: a liquid-glass pill floating centered just under the header (customer view only). */}
+      {view === "customer" && (
+        <div className="storm-float" ref={stormRef} role="region" aria-label={t.stormLevel}>
+          <ScenarioControls t={t} scenario={scenario} onScenario={setScenario} />
+        </div>)}
 
-      {/* Customer view stays mounted while hidden (behind onboarding or the console), so the map has loaded by the
-          time it's shown and the selection and chat survive a trip to the console. */}
-      <main className="view" hidden={view !== "customer" || onboarding}>
-        <ScenarioControls t={t} scenario={scenario} onScenario={setScenario} needs={needs} onToggleNeed={toggleNeed}
-          referenceStorms={weather?.reference_storms ?? []}
-          enrolled={enrolled} onEnrolled={setEnrolled} utilityConfirmed={utilityConfirmed} onUtilityConfirmed={setUtilityConfirmed} />
-
-        <form className="locate" onSubmit={(e) => {
-          e.preventDefault();
-          if (typed.trim()) { focusResults.current = true; zoomToResult.current = true; setPremise(typed.trim()); }
-        }}>
-          <label htmlFor="premise-id">{t.locateLabel}</label>
-          <input id="premise-id" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={t.locatePlaceholder} />
-          <button type="submit">{t.lookUp}</button>
-        </form>
-
-        {/* Ring the dot the backend says represents this location (works for typed premise IDs too). */}
-        <div className="map" role="region" aria-label={t.mapAria}>
-          <OutageMap t={t} dark={theme === "dark"} layers={layers} focus={focus}
-            selectedId={result?.map_point_id ?? premise} onSelect={setPremise} />
+      {/* Customer view stays mounted while the console is open, so the map, selection and chat survive the trip. */}
+      <div className="customer" hidden={view !== "customer"}>
+        <div className="map map-full" role="region" aria-label={t.mapAria}>
+          <OutageMap t={t} dark={theme === "dark"} layers={layers} focus={focus} topInset={chromeH}
+            selectedId={result?.map_point_id ?? premise} onSelect={selectHome} />
         </div>
 
-        {error && <p role="alert" className="error">{t.apiError(error)}</p>}
+        {/* First visit: a translucent premise-ID panel over the whole-territory map. */}
+        {onboarding && (
+          <div className="onboard-overlay">
+            {/* Abby's component needs t.onboarding; if that's ever missing, the stand-in shows instead of a blank page. */}
+            {t.onboarding ? <Onboarding t={t} onComplete={onboarded} /> : <OnboardingStandIn t={t} onComplete={onboarded} />}
+            <button type="button" className="link-button" onClick={() => setOnboarding(false)}>{t.onboardSkip}</button>
+          </div>)}
+
+        {error && <p role="alert" className="error toast">{t.apiError(error)}</p>}
 
         {/* Always mounted so screen readers announce each change once. */}
         <p className="sr-only" aria-live="polite">{summary}</p>
 
-        {result && <ResultsPanel t={t} result={result} changes={changes}
+        {/* key = the home: a new home remounts the cards, so they slide in again; storm changes just update them. */}
+        {showDock && <ResultsPanel key={premise} t={t} result={result} changes={changes} onClose={() => setDockOpen(false)}
+          controls={{ needs, onToggleNeed: toggleNeed, enrolled, onEnrolled: setEnrolled, utilityConfirmed, onUtilityConfirmed: setUtilityConfirmed }}
           notifyRequest={{ premise_id: premise, scenario, profile,
                            previous_range_text: shownPrev.current.range, previous_scenario: shownPrev.current.scenario }} />}
 
         <ChatPanel t={t} premiseId={premise} scenario={scenario} profile={profile} utilityStatus={utilityStatus} />
-      </main>
+      </div>
 
       {view === "console" && <main className="view"><Console /></main>}
     </div>
