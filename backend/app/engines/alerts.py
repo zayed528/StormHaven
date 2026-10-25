@@ -106,7 +106,13 @@ def build_alerts(risk: RiskResponse, rest: RestorationResponse, profile: Custome
     # ETR-missed and downed-line are listed but inactive here: they need live events (outage feed / chat).
     esc_cfg = CFG["escalation"]
     medical_long = "medical_device" in needs and rest.p50_hours > esc_cfg["medical_need_outage_hours"]
+    # Declared medical device whose stated backup won't outlast the pessimistic estimate (guidance.backup_check).
+    backup = profile.backup_power_hours
+    backup_at_risk = ("medical_device" in needs and backup is not None and rest.source != "fallback"
+                      and backup < rest.p90_hours)
     escalations = [
+        Escalation(trigger="Declared medical device whose backup may run out before power returns",
+                   action="Priority call from AEP within the hour; help find a place with power", active=backup_at_risk),
         Escalation(trigger=f"Declared medical need and estimated outage > {esc_cfg['medical_need_outage_hours']} hrs",
                    action="Voice call + human agent follow-up; share nearest power/shelter options", active=medical_long),
         Escalation(trigger="Estimate missed by more than "

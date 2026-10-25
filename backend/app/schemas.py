@@ -60,6 +60,8 @@ class CustomerProfile(BaseModel):
     alerts_enrolled: bool = False
     channels: list[Channel] = []        # channel TYPES only, never the phone number/email itself
     language: Literal["en", "es"] = "en"   # picks the message template set
+    # Opt-in, and only used when "medical_device" is declared: how long the device's backup power lasts.
+    backup_power_hours: Optional[float] = Field(None, ge=0, le=240)
 
 
 class SimulatedUtilityStatus(BaseModel):
@@ -199,11 +201,21 @@ class GuidanceItem(BaseModel):
     reason: str = ""                  # why this applies to YOU
 
 
+class BackupCheck(BaseModel):
+    """Declared medical device: does its backup power outlast this home's restoration estimate?"""
+    status: Literal["short", "tight", "ok"]   # short: < best guess (P50); tight: < pessimistic end (P90)
+    backup_hours: float
+    p50_hours: float
+    p90_hours: float
+    message: str
+
+
 class GuidanceResponse(BaseModel):
     """Answer to "What should I do to prepare?"."""
     safety: list[GuidanceItem]
     actions: list[GuidanceItem]
     duration_bucket: str              # short | day | multi_day | extended (from P90)
+    backup_check: Optional[BackupCheck] = None   # only with a declared medical device + backup hours
 
 
 class ScheduledAlert(BaseModel):

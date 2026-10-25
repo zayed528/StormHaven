@@ -125,7 +125,7 @@ def chat(history: list[dict], premise_id: str | None, circuit_id: str | None,
                         utility_status, current, current_payload, data_mode)
     except Exception as exc:  # Bedrock, malformed output, and validation failures all fail closed.
         logger.warning("Bedrock chat fell back safely (%s)", type(exc).__name__)
-        reply = _offline_reply(current, data_mode)
+        reply = _offline_reply(current, data_mode, profile=effective_profile)
     return f"{SAFETY_911}\n\n{reply}" if emergency else reply
 
 
@@ -144,7 +144,11 @@ def _is_outage_question(history: list[dict]) -> bool:
              "life support", "here", "over here", "around here", "this area", "my area",
              "near me", "nearby", "location", "situation", "happening", "baby", "babies",
              "family", "reveal", "private",
-             "contact", "system prompt", "ignore the system")
+             "contact", "system prompt", "ignore the system",
+             # Spanish (profile.language = "es")
+             "luz", "apagón", "apagon", "electricidad", "corriente", "restaur", "tormenta", "cuadrilla",
+             "preparar", "prepararme", "alerta", "alertas", "riesgo", "cuánto", "cuanto", "medicina",
+             "equipo médico", "bebé", "mascota", "generador")
     if _contains_intent_term(text, terms):
         return True
     # Short follow-ups in the chat are still about the displayed outage outlook.
@@ -313,8 +317,8 @@ def _answer(history, premise_id, circuit_id, base_scenario, profile, utility_sta
             current, current_payload: dict, data_mode: str) -> str:
     """Bedrock may request one what-if, then selects which deterministic answer section to render."""
     client = get_client()
-    if client is None:
-        return _offline_reply(current, data_mode)
+    if client is None:                       # offline: route by the question's wording
+        return _offline_reply(current, data_mode, _latest_question(history), profile)
 
     messages = list(history)
     selected = current
@@ -338,7 +342,7 @@ def _answer(history, premise_id, circuit_id, base_scenario, profile, utility_sta
             guarded_text = "".join(c.get("text", "") for c in msg["content"] if isinstance(c, dict)).strip()
             return scrub_text(guarded_text) if guarded_text else _conversation_fallback(profile.language)
         if stop_reason not in {"tool_use", "end_turn", "stop_sequence"}:
-            return _offline_reply(current, data_mode)
+            return _offline_reply(current, data_mode, profile=profile)
         msg = _validated_message(out)
         messages.append(msg)
         if stop_reason != "tool_use":                    # model is done -> parse intent, render facts in code
@@ -377,7 +381,7 @@ def _answer(history, premise_id, circuit_id, base_scenario, profile, utility_sta
         }}]})
         tool_used = True
     # Out of rounds: return the already-computed deterministic answer instead of a partial model answer.
-    return _offline_reply(current, data_mode)
+    return _offline_reply(current, data_mode, profile=profile)
 
 
 def _guarded_user_messages(messages: list[dict]) -> list[dict]:
@@ -448,8 +452,17 @@ def _parse_answer_type(text: str) -> str:
 def _explicit_answer_type(question: str) -> str | None:
     """Route only unmistakable challenge-question wording; leave ambiguous text to Nova."""
     lower = question.lower()
-    if _contains_intent_term(lower, ("alert", "eligible", "qualify")):
+    if _contains_intent_term(lower, ("alert", "eligible", "qualify", "alerta", "alertas", "califico", "califica")):
         return "alerts"
+    # Spanish: "¿Cuánto podría tardar…?", "¿Qué debo hacer para prepararme?", "¿Por qué…?", "¿Me quedaré sin luz?"
+    if any(w in lower for w in ("cuánto", "cuanto", "tardar", "restaur", "volver la luz", "vuelva la luz")):
+        return "restoration"
+    if any(w in lower for w in ("preparar", "prepararme", "qué debo hacer", "que debo hacer")):
+        return "preparation"
+    if "por qué" in lower or "por que" in lower:
+        return "why"
+    if any(w in lower for w in ("sin luz", "apagón", "apagon", "quedaré sin", "quedare sin", "riesgo")):
+        return "risk"
     if any(phrase in lower for phrase in ("how long", "power return")) or _contains_intent_term(
             lower, ("restoration", "restore")):
         return "restoration"
@@ -478,38 +491,60 @@ def _render_response(r, data_mode: str, answer_type: str = "overview", what_if: 
         return ("I couldn't match your location to our network data, so StormHaven did not make an outage "
                 "prediction. Please check AEP's official outage map or contact AEP directly.")
 
-    prefix = "For that what-if scenario, " if what_if else ""
-    risk = (f"{prefix}StormHaven's model estimates a {r.risk.band} outage risk "
-            f"({round(r.risk.probability * 100)}%, {r.risk.trust.confidence} confidence).")
+    es = profile is not None and profile.language == "es"
+    band = {"Low": "bajo", "Moderate": "moderado", "High": "alto", "Very High": "muy alto"}.get(r.risk.band, r.risk.band) \
+        if es else r.risk.band
+    conf = {"High": "alta", "Medium": "media", "Low": "baja"}.get(r.risk.trust.confidence) if es \
+        else r.risk.trust.confidence
+    pct = round(r.risk.probability * 100)
+    if es:
+        prefix = "Para ese escenario hipotético, " if what_if else ""
+        risk = f"{prefix}El modelo de StormHaven estima un riesgo de apagón {band} ({pct}%, confianza {conf})."
+    else:
+        prefix = "For that what-if scenario, " if what_if else ""
+        risk = f"{prefix}StormHaven's model estimates a {band} outage risk ({pct}%, {conf} confidence)."
     restoration = r.restoration.range_text
-    mode = ("This uses the synthetic demo network, not real AEP locations."
-            if data_mode == "synthetic" else "This uses the processed AEP challenge dataset.")
-    confirmation = ("Demo simulation: the utility-confirmation toggle marks this location as out; "
-                    "this is not a live AEP feed."
-                    if r.restoration.outage_confirmed else
-                    "No outage confirmation from a live utility feed is available.")
+    # Only the synthetic network needs a disclaimer; on real data the answer simply stands.
+    mode = (("Esto usa la red de demostración sintética, no ubicaciones reales de AEP." if es else
+             "This uses the synthetic demo network, not real AEP locations.") if data_mode == "synthetic" else "")
+    if r.restoration.outage_confirmed:
+        confirmation = ("Simulación de demostración: el estado de confirmación de la empresa marca esta ubicación "
+                        "sin luz; no es una fuente en vivo de AEP." if es else
+                        "Demo simulation: the utility-confirmation toggle marks this location as out; "
+                        "this is not a live AEP feed.")
+    else:
+        confirmation = ("AEP aún no ha confirmado un apagón en su ubicación; esto es una estimación." if es else
+                        "No outage confirmation from a live utility feed is available.")
 
     if answer_type == "risk":
         parts = [risk]
     elif answer_type == "why":
         parts = [risk] + [factor.plain_language for factor in r.risk.factors[:3]]
     elif answer_type == "restoration":
-        parts = [risk, restoration] + [driver.plain_language for driver in r.restoration.drivers[:2]]
+        parts = [risk, restoration, r.restoration.storm_context] + \
+            [driver.plain_language for driver in r.restoration.drivers[:2]]
     elif answer_type == "preparation":
         guidance = r.guidance.safety[:2] + r.guidance.actions[:3]
         parts = [risk] + [item.text for item in guidance]
     elif answer_type == "alerts":
-        status = ("You are eligible for the configured outage alerts."
-                  if r.alerts.eligible else "You are not currently eligible for the configured outage alerts.")
+        status = (("Usted califica para las alertas de apagón configuradas." if r.alerts.eligible else
+                   "Por ahora no califica para las alertas de apagón configuradas.") if es else
+                  ("You are eligible for the configured outage alerts." if r.alerts.eligible else
+                   "You are not currently eligible for the configured outage alerts."))
         parts = [status] + r.alerts.reasons[:3]
     else:
         actions = [item.text for item in r.guidance.actions[:1]]
         parts = [risk, restoration, *actions]
+    # A confirmed outage is always worth saying; "no confirmation yet" only belongs with timing answers.
+    if not r.restoration.outage_confirmed and answer_type not in ("overview", "restoration"):
+        confirmation = ""
 
     parts.extend([confirmation, mode])
     return scrub_text(" ".join(part for part in parts if part))
 
 
-def _offline_reply(r, data_mode: str) -> str:
-    """Deterministic answer when Bedrock isn't available — the demo never dies."""
-    return _render_response(r, data_mode, "overview")
+def _offline_reply(r, data_mode: str, question: str = "", profile: CustomerProfile | None = None) -> str:
+    """Deterministic answer when Bedrock isn't available — the demo never dies. Routed by the question's
+    wording (EN/ES), so "How long?" gets the restoration answer, not the same overview every time."""
+    return _render_response(r, data_mode, _explicit_answer_type(question) or "overview",
+                            profile=profile, question=question)

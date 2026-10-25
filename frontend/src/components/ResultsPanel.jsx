@@ -1,7 +1,9 @@
 // The answer for one home, floating over the full-screen map: a safety strip + three cards side by side along the
 // bottom: How long (the restoration range, "What if...?" changes, the timeline, the limits) / the outage risk and
-// why / Alerts. Preparation advice and declared needs are the chat's job. The cards slide in from the left one after
-// another when a home is chosen (App remounts this per home).   Owner: Nandan
+// why / What you can do (opt-in needs, medical backup check, tailored actions) / Alerts. Above them: safety, then
+// "Confirmed by AEP" (utility status, kept separate from our estimates, as the brief requires). The cards slide in
+// from the left one after another when a home is chosen (App remounts this per home).   Owner: Nandan
+// Need keys match DeclaredNeed in backend/app/schemas.py. Opt-in only: nothing here is ever inferred.
 import React, { useEffect, useState } from "react";
 import { sendNotify } from "../api/client.js";
 import { fmtRange } from "../i18n.js";
@@ -12,6 +14,9 @@ import StepTimeline from "./StepTimeline.jsx";
 // Safety banner color class per risk band (colors match the map dots). Unknown = location not matched.
 // Titles and intro sentences live in i18n.js (t.safety).
 const BAND_CLASS = { Low: "low", Moderate: "moderate", High: "high", "Very High": "very-high", Unknown: "unknown" };
+const NEED_KEYS = ["medical_device", "refrigerated_medication", "mobility", "infants", "pets", "critical_facility"];
+// "A broken pole is reported on your line": the damage What-if (brief: the range must follow damage too).
+const POLE = [{ damage_type: "broken_pole", quantity: 1 }];
 
 // "Send this alert as a text" for one message. Shows what the server says it did (sent / dry run / mock).
 function SendButton({ t, messageKey, request, eligible }) {
@@ -36,7 +41,7 @@ function SendButton({ t, messageKey, request, eligible }) {
 
 // whatIf = { scenario, onScenario, baseCrews, moreCrews } (state lives in App): the "What if...?" controls change the
 // scenario sent to the engines, so every number in the cards (and the map) follows.
-export default function ResultsPanel({ t, result, changes, notifyRequest, whatIf, onClose }) {
+export default function ResultsPanel({ t, result, changes, notifyRequest, whatIf, you, onClose }) {
   // Esc closes the cards (the map stays; clicking a home opens them again).
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape" && !e.defaultPrevented && !document.querySelector(".chat:not([hidden])")) onClose(); };
@@ -60,6 +65,8 @@ export default function ResultsPanel({ t, result, changes, notifyRequest, whatIf
   const sc = whatIf.scenario;
   const roadsBlocked = sc.road_access === "blocked";
   const moreCrews = sc.crews_available > whatIf.baseCrews;
+  const poleReported = (sc.extra_damage ?? []).length > 0;
+  const check = guidance.backup_check;
   // The three cards, built by position i (sets the slide-in stagger). On a phone the risk card comes first, since only
   // one card is visible at a time in the swipeable row.
   const cards = {
@@ -83,6 +90,8 @@ export default function ResultsPanel({ t, result, changes, notifyRequest, whatIf
                   onClick={() => whatIf.onScenario({ ...sc, road_access: roadsBlocked ? "normal" : "blocked" })}>{t.whatIfRoads}</button>
                 <button type="button" className="whatif-chip" aria-pressed={moreCrews}
                   onClick={() => whatIf.onScenario({ ...sc, crews_available: moreCrews ? whatIf.baseCrews : whatIf.moreCrews })}>{t.whatIfCrews}</button>
+                <button type="button" className="whatif-chip" aria-pressed={poleReported}
+                  onClick={() => whatIf.onScenario({ ...sc, extra_damage: poleReported ? [] : POLE })}>{t.whatIfDamage}</button>
               </div>
             </div>
             <ul>{restoration.drivers.map((d, i) => <li key={i}>{t.tr(d.plain_language)}</li>)}</ul>
@@ -110,7 +119,32 @@ export default function ResultsPanel({ t, result, changes, notifyRequest, whatIf
           </>)}
         </article>),
 
-    // Card 3: alerts (eligibility, follow-ups, the messages and "send as a text").
+    // Card 3: what you can do: opt-in needs (they also reach the alerts and the chat), the medical backup check,
+    // and the tailored actions with the reason each one applies to you.
+    actions: (i) => (
+        <article key="actions" className="card card-actions" style={{ "--i": i }} tabIndex={0}><h2>{t.actionsTitle}</h2>
+          <fieldset className="needs-pick">
+            <legend className="muted">{t.needsLegend}</legend>
+            <div className="whatif-chips">
+              {NEED_KEYS.map((n) => (
+                <button key={n} type="button" className="whatif-chip" aria-pressed={you.needs.includes(n)}
+                  onClick={() => you.toggleNeed(n)}>{t.needs[n] ?? n}</button>))}
+            </div>
+            {you.needs.includes("medical_device") && (
+              <label className="backup-field">{t.backupLabel}
+                <input type="number" inputMode="decimal" min="0" max="240" step="0.5" value={you.backupHours}
+                  placeholder={t.backupPlaceholder} onChange={(e) => you.setBackupHours(e.target.value)} />
+              </label>)}
+          </fieldset>
+          {check && (
+            <p className={`backup-check ${check.status}`} role={check.status === "short" ? "alert" : undefined}>
+              <strong>{t.backupStatus[check.status]}</strong> {check.message}</p>)}
+          <ul className="actions-list">{guidance.actions
+            .filter((a) => !check || a.text !== check.message)
+            .map((a, i) => <li key={i}>{a.text}{a.reason && <span className="muted"> ({t.tr(a.reason)})</span>}</li>)}</ul>
+        </article>),
+
+    // Card 4: alerts (eligibility, follow-ups, the messages and "send as a text").
     alerts: (i) => (
         <article key="alerts" className="card" style={{ "--i": i }} tabIndex={0}><h2>{t.alerts}</h2>
           <p>{alerts.eligible ? t.eligibleYes : t.eligibleNo}</p>
@@ -127,7 +161,8 @@ export default function ResultsPanel({ t, result, changes, notifyRequest, whatIf
           </details>
         </article>),
   };
-  const order = narrow ? ["risk", "howlong", "alerts"] : ["howlong", "risk", "alerts"];
+  const order = fallback ? ["risk", "howlong", "alerts"]
+    : narrow ? ["risk", "howlong", "actions", "alerts"] : ["howlong", "risk", "actions", "alerts"];
 
   return (
     // tabIndex -1: App moves focus here after a keyboard lookup, so screen readers start at the answer.
@@ -138,6 +173,18 @@ export default function ResultsPanel({ t, result, changes, notifyRequest, whatIf
         <div className={`safety ${BAND_CLASS[risk.band] ?? "unknown"}`} role="alert">
           <details><summary><strong>⚠ {sb.title}</strong> <span className="safety-intro">{sb.text}</span></summary>
             <ul>{guidance.safety.map((s, i) => <li key={i}>{s.text}</li>)}</ul></details></div>)}
+
+      {/* Confirmed by AEP: utility status only (simulated in the demo), visibly separate from our estimates. */}
+      {!fallback && (
+        <div className={`confirmed${restoration.outage_confirmed ? " on" : ""}`} role="status">
+          <strong>{t.confirmedBy}</strong>{" "}
+          {restoration.outage_confirmed
+            ? <>{t.outageConfirmedShort} {restoration.confirmed_etr && <span>{restoration.confirmed_etr}</span>}</>
+            : t.notConfirmedYet}
+          {you.toggleConfirmed && (
+            <button type="button" className="link-button demo-confirm" onClick={you.toggleConfirmed}>
+              {restoration.outage_confirmed ? t.demoUnconfirm : t.demoConfirm}</button>)}
+        </div>)}
 
       {t.engineNote && <p className="muted engine-note">{t.engineNote}</p>}
 

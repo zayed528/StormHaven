@@ -53,3 +53,18 @@ actions:
      text_es: "Meta a sus mascotas dentro de la casa y tenga comida y agua adicionales para ellas.", reason_es: "Nos dijo que tiene mascotas."}
   - {text: "Test backup generation and confirm your facility's emergency contact with AEP is current.", phase: before, min_band: Low, needs: [critical_facility], reason: "You identified as a critical facility.",
      text_es: "Pruebe su generación de respaldo y confirme que el contacto de emergencia de su instalación con AEP esté al día.", reason_es: "Se identificó como una instalación crítica."}
+
+# Medical backup check (engines/guidance.py): only when the customer DECLARED a medical device and told us how long
+# its backup power lasts. {backup}, {p50}, {p90} are filled with hours/days by the engine from the restoration range.
+backup_check:
+  short:
+    text: "Your device's backup (~{backup}) is shorter than our best guess for how long you could be without power (~{p50}). Plan now to go somewhere with power, and call 911 in an emergency."
+    text_es: "El respaldo de su equipo (~{backup}) dura menos que nuestra mejor estimación de cuánto tiempo podría estar sin luz (~{p50}). Planee ahora ir a un lugar con electricidad y llame al 911 en una emergencia."
+  tight:
+    text: "Your device's backup (~{backup}) covers our best guess (~{p50}) but not a longer outage (up to ~{p90}). Arrange a backup place with power, just in case."
+    text_es: "El respaldo de su equipo (~{backup}) cubre nuestra mejor estimación (~{p50}), pero no un apagón más largo (hasta ~{p90}). Prepare un lugar alternativo con electricidad, por si acaso."
+  ok:
+    text: "Your device's backup (~{backup}) should outlast even a longer outage (up to ~{p90}). Keep it fully charged."
+    text_es: "El respaldo de su equipo (~{backup}) debería durar incluso un apagón más largo (hasta ~{p90}). Manténgalo completamente cargado."
+  reason: "You told us you use powered medical equipment and how long its backup lasts."
+  reason_es: "Nos dijo que usa equipo médico eléctrico y cuánto dura su respaldo."
