@@ -5,7 +5,7 @@
 // null and App zooms to the customer's dot from the concierge answer instead.
 import React, { useState } from "react";
 
-const NEEDS = ["medical_device", "refrigerated_medication", "mobility", "infants", "pets", "critical_facility"];
+const NEEDS = ["refrigerated_medication", "mobility", "infants", "pets", "critical_facility"];
 
 export default function OnboardingStandIn({ t, onComplete }) {
   const [premiseId, setPremiseId] = useState("");

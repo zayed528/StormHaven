@@ -13,7 +13,7 @@ import React, { useState } from "react";
 import "./onboarding.css";
 
 // Opt-in needs, same schema values + labels as ScenarioControls (DeclaredNeed in schemas.py).
-const NEEDS = ["medical_device", "refrigerated_medication", "mobility", "infants", "pets", "critical_facility"];
+const NEEDS = ["refrigerated_medication", "mobility", "infants", "pets", "critical_facility"];
 
 export default function Onboarding({ t, onComplete }) {
   const o = t.onboarding;

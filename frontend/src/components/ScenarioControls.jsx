@@ -9,7 +9,7 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 
 // Schema values (DeclaredNeed in backend/app/schemas.py). Labels: t.needs[value].
-const NEEDS = ["medical_device", "refrigerated_medication", "mobility", "infants", "pets", "critical_facility"];
+const NEEDS = ["refrigerated_medication", "mobility", "infants", "pets", "critical_facility"];
 
 // Storm levels: pct = the severity_percentile sent to the API (the storm's rank among past storms). Picked from the
 // real network's map: 50 = typical storm (all green), 95 = first yellow/orange areas, 97 = mixed, 99 = worst on record.
