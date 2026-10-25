@@ -5,6 +5,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from app.config import LOG_DIR
+from app.public_demo import enabled as public_demo_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,8 @@ def log_prediction(request: dict, response: dict) -> str:
     The ID is returned to the client as ConciergeResponse.audit_id so any answer can be traced later.
     logs/ is git-ignored. Note: requests include declared needs, so treat this file as sensitive."""
     audit_id = uuid.uuid4().hex[:12]           # short random ID, not derived from customer data
+    if public_demo_enabled():
+        return f"demo-{audit_id}"
     rec = {"audit_id": audit_id, "ts": datetime.now(timezone.utc).isoformat(),
            "model_version": MODEL_VERSION, "request": request, "response": response}
     try:

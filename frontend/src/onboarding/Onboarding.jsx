@@ -13,7 +13,7 @@
 import React, { useState } from "react";
 import "./onboarding.css";
 
-export default function Onboarding({ t, onComplete }) {
+export default function Onboarding({ t, onComplete, publicDemo = false, demoLocations = [] }) {
   const o = t.onboarding;
   const [premiseId, setPremiseId] = useState("");
   const [enrolled, setEnrolled] = useState(true);
@@ -67,6 +67,27 @@ export default function Onboarding({ t, onComplete }) {
       { timeout: 10000 },
     );
   };
+
+  if (publicDemo) {
+    return (
+      <section className="onboarding" aria-label={o.demoTitle}>
+        <div className="ob-card">
+          <h1>{o.demoTitle}</h1>
+          <p className="ob-lede">{o.demoLede}</p>
+          <div className="ob-actions">
+            {demoLocations.map((place, index) => (
+              <button key={place.id} type="button" className="ob-primary" onClick={() => onComplete({
+                premise_id: place.id, declared_needs: [], alerts_enrolled: false, channels: [],
+                language: t.locale?.startsWith("es") ? "es" : "en",
+                center: { lat: place.lat, lon: place.lon }, zoom: 14,
+              })}>{o.demoArea(index + 1)}</button>
+            ))}
+          </div>
+          <p className="ob-privacy">{o.demoPrivacy}</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="onboarding" aria-label={o.title}>

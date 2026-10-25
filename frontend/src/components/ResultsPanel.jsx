@@ -122,7 +122,7 @@ export default function ResultsPanel({ t, result, changes, notifyRequest, whatIf
             {Object.entries(alerts.messages).map(([key, m]) => (
               <figure key={key}><figcaption>{t.messageLabels[key] ?? key}</figcaption><blockquote>{m}</blockquote>
                 {/* Remount when the message text changes, so an old "Sent" status never sits under new text. */}
-                <SendButton key={m} t={t} messageKey={key} request={notifyRequest} eligible={alerts.eligible} />
+                {notifyRequest && <SendButton key={m} t={t} messageKey={key} request={notifyRequest} eligible={alerts.eligible} />}
               </figure>))}
           </details>
         </article>),

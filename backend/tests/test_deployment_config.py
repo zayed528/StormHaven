@@ -40,6 +40,21 @@ def test_startup_preflight_rejects_synthetic_store(monkeypatch):
         startup.main()
 
 
+def test_public_startup_accepts_only_explicit_synthetic_store(monkeypatch):
+    from types import SimpleNamespace
+    import app.startup as startup
+
+    monkeypatch.setenv("STORMHAVEN_PUBLIC_DEMO", "true")
+    monkeypatch.setenv("STORMHAVEN_DATA", "synthetic")
+    monkeypatch.setenv("STORMHAVEN_S3_ENABLED", "false")
+    monkeypatch.setattr(startup, "get_store", lambda: SimpleNamespace(is_synthetic=True))
+    startup.main()
+
+    monkeypatch.setattr(startup, "get_store", lambda: SimpleNamespace(is_synthetic=False))
+    with pytest.raises(RuntimeError, match="non-synthetic"):
+        startup.main()
+
+
 def test_protected_routes_are_not_enabled_without_flags(monkeypatch):
     monkeypatch.delenv("STORMHAVEN_ENABLE_OPERATOR_ROUTES", raising=False)
     monkeypatch.delenv("STORMHAVEN_ENABLE_NOTIFY", raising=False)
