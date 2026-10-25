@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 _TOOL_NAME = "get_outage_outlook"
 _ALLOWED_TOOL_ARGS = {"severity_percentile", "crews_available", "road_access"}
 _ANSWER_TYPES = {"overview", "risk", "restoration", "why", "preparation", "alerts"}
-_CONVERSATIONAL_SYSTEM = """You are StormHaven's customer assistant.
+_CONVERSATIONAL_SYSTEM = """You are Jed, StormHaven's customer assistant.
 Stay focused on outage risk, restoration estimates, storm preparation, alerts, and safe utility information.
 If the message is unrelated, insulting, or unclear, respond briefly and politely invite the customer to ask
 about one of those topics. Do not provide medical, legal, mental-health, or emergency advice beyond the fixed
@@ -262,11 +262,11 @@ def _small_talk_reply(history: list[dict], language: str) -> str | None:
         return None
     if language == "es":
         if thanks:
-            return "Con gusto. Puedo explicar su riesgo de apagón, el tiempo de restauración, cómo prepararse y sus alertas."
-        return "¡Hola! Puedo explicar su riesgo de apagón, el tiempo de restauración, cómo prepararse y sus alertas."
+            return "Con gusto. Soy Jed. Puedo explicar su riesgo de apagón, el tiempo de restauración, cómo prepararse y sus alertas."
+        return "¡Hola! Soy Jed. Puedo explicar su riesgo de apagón, el tiempo de restauración, cómo prepararse y sus alertas."
     if thanks:
-        return "You're welcome. I can explain your outage risk, restoration range, preparation steps, or alert eligibility."
-    return "Hi! I can explain your outage risk, restoration range, preparation steps, or alert eligibility."
+        return "You're welcome. I'm Jed. I can explain your outage risk, restoration range, preparation steps, or alert eligibility."
+    return "Hi! I'm Jed. I can explain your outage risk, restoration range, preparation steps, or alert eligibility."
 
 
 def _requests_private_contact(history: list[dict]) -> bool:

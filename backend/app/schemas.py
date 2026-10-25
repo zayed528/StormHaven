@@ -178,6 +178,7 @@ class Driver(BaseModel):
 class RestorationResponse(BaseModel):
     """Answer to "How long could restoration take?". Always a range, never one promised time."""
     source: SourceTag = "model_estimate"
+    storm_context: Optional[str] = None  # optional label for the storm/scenario behind the estimate
     p10_hours: float                  # optimistic end
     p50_hours: float                  # best guess
     p90_hours: float                  # pessimistic end

@@ -9,6 +9,10 @@ export const STRINGS = {
     locale: "en-US",
     tr: (s) => s,             // backend sentences: already English
     languageAria: "Language",
+    // onboarding stand-in (until Abby's onboarding/Onboarding.jsx lands) + start over / skip links
+    onboardTitle: "Get your storm outlook", onboardIntro: "Enter the premise ID from your bill. Tell us only what you want us to consider; everything is optional.",
+    onboardPremise: "Premise ID (from your bill)", onboardContinue: "Show my outlook", onboardNotFound: "We couldn't find that premise ID. Check your bill and try again.",
+    onboardSkip: "Skip and explore the map", onboardRestart: "Start over",
     themeAria: "Color theme", themeLight: "Light", themeDark: "Dark",
     skipToLookup: "Skip to premise ID lookup",
     viewsAria: "View", tabCustomer: "Customer view", tabConsole: "Utility console",
@@ -81,7 +85,7 @@ export const STRINGS = {
     tlRange: "Likely range", tlBest: (h) => `Best guess ~${h}`, tlStep: "Repair step (numbered as below)",
     tlYours: (h) => `your power returns · ~${h}`, tlYoursList: "← your power returns", tlListAria: "Likely restoration order",
     // chat
-    chatTitle: "Ask StormHaven", chatOpen: "Open StormHaven assistant", chatClose: "Close StormHaven assistant",
+    chatTitle: "Ask Jed", chatOpen: "Open Jed assistant", chatClose: "Close Jed assistant",
     chatCloseShort: "Close assistant",
     suggested: ["Will I lose power?", "How long could restoration take?", "What should I do to prepare?",
                 "Do I qualify for outage alerts?"],
@@ -90,7 +94,7 @@ export const STRINGS = {
     chatHint: "Click a dot on the map or enter your premise ID, then ask me about your storm outlook.",
     chatHintNudge: "First, pick your home: ",
     chatPlaceholder: "e.g. Will I lose power?", chatQuestion: "Your question", send: "Send",
-    thinking: "StormHaven is thinking…", aiLabel: "StormHaven response", safetyMessage: "Safety message:",
+    thinking: "Jed is thinking…", aiLabel: "Jed's response", safetyMessage: "Safety message:",
     chatError: "I couldn't reach the assistant. Your question was not lost.", chatRetry: "Retry",
     chatPrivacy: "For privacy, don't enter names, addresses, account numbers, or medical details.",
     // map + weather
@@ -103,6 +107,9 @@ export const STRINGS = {
     locale: "es-US",
     tr: toEs,                 // backend sentences -> Spanish (unknown ones stay English)
     languageAria: "Idioma",
+    onboardTitle: "Vea su pronóstico ante la tormenta", onboardIntro: "Ingrese el número de servicio de su factura. Díganos solo lo que quiera que consideremos; todo es opcional.",
+    onboardPremise: "Número de servicio (de su factura)", onboardContinue: "Ver mi pronóstico", onboardNotFound: "No encontramos ese número de servicio. Revise su factura e inténtelo de nuevo.",
+    onboardSkip: "Omitir y explorar el mapa", onboardRestart: "Empezar de nuevo",
     themeAria: "Tema de color", themeLight: "Claro", themeDark: "Oscuro",
     skipToLookup: "Ir a la búsqueda por número de servicio",
     viewsAria: "Vista", tabCustomer: "Vista del cliente", tabConsole: "Consola de la empresa",
@@ -167,7 +174,7 @@ export const STRINGS = {
     tlCaption: "Cuándo podrían hacerse las reparaciones, si se queda sin luz",
     tlRange: "Rango probable", tlBest: (h) => `Mejor estimación ~${h}`, tlStep: "Reparación (numerada como abajo)",
     tlYours: (h) => `vuelve su electricidad · ~${h}`, tlYoursList: "← vuelve su electricidad", tlListAria: "Orden probable de restauración",
-    chatTitle: "Pregunte a StormHaven", chatOpen: "Abrir el asistente de StormHaven", chatClose: "Cerrar el asistente de StormHaven",
+    chatTitle: "Pregúntele a Jed", chatOpen: "Abrir el asistente Jed", chatClose: "Cerrar el asistente Jed",
     chatCloseShort: "Cerrar el asistente",
     suggested: ["¿Me quedaré sin luz?", "¿Cuánto podría tardar la restauración?", "¿Qué debo hacer para prepararme?",
                 "¿Califico para recibir alertas de apagones?"],
@@ -176,7 +183,7 @@ export const STRINGS = {
     chatHint: "Haga clic en un punto del mapa o ingrese su número de servicio y luego pregúnteme sobre su pronóstico.",
     chatHintNudge: "Primero, elija su casa: ",
     chatPlaceholder: "p. ej. ¿Me quedaré sin luz?", chatQuestion: "Su pregunta", send: "Enviar",
-    thinking: "StormHaven está pensando…", aiLabel: "Respuesta de StormHaven", safetyMessage: "Mensaje de seguridad:",
+    thinking: "Jed está pensando…", aiLabel: "Respuesta de Jed", safetyMessage: "Mensaje de seguridad:",
     chatError: "No pudimos conectar con el asistente. Su pregunta no se perdió.", chatRetry: "Reintentar",
     chatPrivacy: "Por privacidad, no escriba nombres, direcciones, números de cuenta ni detalles médicos.",
     mapView: "Vista del mapa", mapDots: "Puntos de riesgo", mapHeat: "Mapa de calor",
