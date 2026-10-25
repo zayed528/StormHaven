@@ -60,7 +60,7 @@ export default function Console() {
   return (
     <section className="console" aria-label="Utility operator console">
       <header className="console-head">
-        <h2>Operator console <span className="console-tag">read-only · model estimates</span></h2>
+        <h2>Operator console</h2>
         <div className="console-knobs">
           <label>Storm level: <strong>{STORM_LEVELS[level][1]}</strong>
             <input type="range" min="0" max={STORM_LEVELS.length - 1} step="1" value={level}

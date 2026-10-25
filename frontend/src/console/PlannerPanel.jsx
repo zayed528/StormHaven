@@ -19,6 +19,21 @@ const get = (url) => fetch(url).then((r) => {
 
 const ACCESS = ["normal", "limited", "blocked"];
 
+// Read the live theme colors off the page so the Plotly chart matches light/dark. Without this the chart
+// hard-coded one blue line and used Plotly's default near-black axis text, which is invisible on the dark
+// panel. We pull the app's own CSS variables (set by App.jsx on <html data-theme>), so it always agrees
+// with the rest of the UI and updates when the user flips the theme.
+function chartColors() {
+  const dark = document.documentElement.dataset.theme === "dark";
+  const css = getComputedStyle(document.documentElement);
+  const v = (name, fallback) => (css.getPropertyValue(name).trim() || fallback);
+  return {
+    line: v("--accent", dark ? "#8FB0FF" : "#1D4ED8"),   // the restoration curve
+    text: v("--ink", dark ? "#E6EDF5" : "#14213D"),      // axis labels + ticks
+    grid: v("--line", dark ? "#2F3D52" : "#D5DEE6"),     // gridlines
+  };
+}
+
 export default function PlannerPanel() {
   // --- controls (the knobs an operator turns) ---
   const [stormId, setStormId] = useState(null);
@@ -55,16 +70,19 @@ export default function PlannerPanel() {
     return () => clearTimeout(t);
   }, [stormId, crews, crewSize, roadAccess]);
 
+  // Theme colors for the chart (recomputed each render, so flipping light/dark re-themes the curve).
+  const ck = chartColors();
+
   // Restoration curve as one Plotly line trace (hour -> % of customers back).
   const curve = useMemo(() => {
     if (!plan?.restore_curve?.length) return null;
     return [{
       x: plan.restore_curve.map((d) => d.hour),
       y: plan.restore_curve.map((d) => d.pct_restored),
-      type: "scatter", mode: "lines", line: { color: "#1D4ED8", width: 2 },
+      type: "scatter", mode: "lines", line: { color: ck.line, width: 2 },
       hovertemplate: "%{y:.0f}% back by hour %{x:.0f}<extra></extra>",
     }];
-  }, [plan]);
+  }, [plan, ck.line]);
 
   // --- render ---
   if (available === false) {
@@ -82,7 +100,7 @@ export default function PlannerPanel() {
   return (
     <section className="planner" aria-label="Storm restoration plan">
       <header className="console-head">
-        <h3>Storm restoration plan <span className="console-tag">read-only · model estimate</span></h3>
+        <h3>Storm restoration plan</h3>
         <div className="console-knobs">
           <label>Storm
             <select value={stormId ?? ""} onChange={(e) => setStormId(e.target.value || null)}>
@@ -123,7 +141,11 @@ export default function PlannerPanel() {
               <Plot data={curve}
                 layout={{
                   height: 220, margin: { l: 40, r: 10, t: 6, b: 34 },
-                  xaxis: { title: "hours", zeroline: false }, yaxis: { range: [0, 100], ticksuffix: "%" },
+                  // Theme-aware: axis labels/ticks use --ink and gridlines use --line, so text stays readable
+                  // on the dark panel (previously it defaulted to near-black and vanished in dark mode).
+                  font: { color: ck.text },
+                  xaxis: { title: "hours", zeroline: false, color: ck.text, gridcolor: ck.grid },
+                  yaxis: { range: [0, 100], ticksuffix: "%", color: ck.text, gridcolor: ck.grid },
                   paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
                 }}
                 config={{ displayModeBar: false, responsive: true }}
