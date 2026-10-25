@@ -38,8 +38,6 @@ Each step names the minimum-viable-demo (MVD) step it proves. The judges' rule "
 - Tick **Powered medical equipment** (opt-in, never inferred) → medical battery and backup-plan items appear, a medical **Safety** item appears, and "**We'll follow up personally**" shows the human callback escalation.
 - Read **Alerts**: eligible because she's enrolled and has a channel.
 
-*(Optional, if real weather is happening on demo day: point at the live forecast card and any NWS warning. "This is today's real forecast for the area. It's context; you choose the scenario.")*
-
 ### 5. Proactive communication (MVD 5) ~40 s
 - Show the **Before the storm** message.
 - Tick **Demo only → Simulate: the utility confirms an outage**. The **Demo utility status** column fills, labeled as a simulation, still separate from **Our estimate**.

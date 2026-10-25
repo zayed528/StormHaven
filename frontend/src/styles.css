@@ -89,12 +89,6 @@ figure { margin: .5rem 0 0; } figcaption { font-size: .8rem; font-weight: 600; c
 .locate { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .locate input { padding: .4rem; font: inherit; }
 .locate button { padding: .4rem .9rem; font: inherit; }
-.weather { background: var(--surface); border: 1px solid var(--line); padding: .75rem 1rem; }
-.weather h2 { font-size: 1.05rem; margin: 0 0 .4rem; }
-.weather .days { list-style: none; padding: 0; margin: .25rem 0; display: flex; flex-wrap: wrap; gap: .4rem 1.5rem; }
-.weather .nws { border-left: 6px solid var(--alert); background: var(--tint-alert); padding: .5rem .75rem; margin-bottom: .5rem; }
-.weather .nws ul { margin: .25rem 0 0; }
-.credit { font-size: .75rem; color: var(--muted); margin: .4rem 0 0; }
 
 /* chat: suggested questions, AI label, thinking line, fixed safety message */
 .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .5rem; }
@@ -233,4 +227,22 @@ input[type="range"] { accent-color: var(--fill); }
   .chat-launcher { right: calc(.75rem + env(safe-area-inset-right, 0px)); bottom: calc(.75rem + env(safe-area-inset-bottom, 0px)); }
   .theme-switch { left: calc(.75rem + env(safe-area-inset-left, 0px)); bottom: calc(.75rem + env(safe-area-inset-bottom, 0px)); }
   .chat { bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px)); height: calc(100vh - 6.5rem - env(safe-area-inset-bottom, 0px)); }
+}
+/* --- animations (all switched off for people who ask their computer to reduce motion) --- */
+/* Chat window pops up out of the robot's corner when opened. */
+@keyframes chat-open { from { opacity: 0; transform: translateY(14px) scale(.94); } to { opacity: 1; transform: none; } }
+.chat:not([hidden]) { transform-origin: bottom right; animation: chat-open .24s cubic-bezier(.2, .9, .3, 1.15); }
+.chat-launcher { transition: transform .18s ease, background-color .18s ease; }
+.chat-launcher:hover { transform: scale(1.06); }
+.chat-launcher[aria-expanded="true"] { transform: rotate(-10deg) scale(.96); }
+/* Theme switch: the new theme grows in a circle from the clicked sun/moon (App.jsx drives the clip-path), so the
+   browser's default cross-fade is turned off here. The newly active icon spins in. */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-new(root) { z-index: 1; }
+@keyframes icon-in { from { transform: rotate(-90deg) scale(.6); opacity: .4; } to { transform: none; opacity: 1; } }
+.theme-switch button[aria-pressed="true"] svg { animation: icon-in .45s cubic-bezier(.2, .9, .3, 1.2); }
+.theme-switch button { transition: background-color .2s ease, color .2s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .chat:not([hidden]), .theme-switch button[aria-pressed="true"] svg { animation: none; }
+  .chat-launcher, .chat-launcher:hover, .chat-launcher[aria-expanded="true"] { transition: none; transform: none; }
 }

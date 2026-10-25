@@ -1,10 +1,10 @@
 // StormHaven: map-first storm outage concierge. State lives here; components render.   Owner: Nandan (was Abby)
 import React, { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import OutageMap from "./components/OutageMap.jsx";
 import ScenarioControls from "./components/ScenarioControls.jsx";
 import ResultsPanel from "./components/ResultsPanel.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
-import WeatherCard from "./components/WeatherCard.jsx";
 import Console from "./console/Console.jsx";          // Abby's utility console (fetches its own data)
 import { getConcierge, getHealth, getMap, getWeather } from "./api/client.js";
 import { STRINGS, fmtRange } from "./i18n.js";
@@ -68,9 +68,28 @@ export default function App() {
     try { localStorage.setItem(THEME_KEY, theme); } catch { /* blocked: the choice just lasts this visit */ }
   }, [theme]);
 
+  // Switching themes: the new theme spreads in a circle from the button that was clicked (View Transitions API).
+  // Browsers without it, and people who turn off animations, get the instant switch.
+  const switchTheme = (code, e) => {
+    if (code === theme) return;
+    const apply = () => {
+      document.documentElement.dataset.theme = code;   // paint the new colors now, so the "after" snapshot has them
+      flushSync(() => setTheme(code));
+    };
+    if (!document.startViewTransition || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { apply(); return; }
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
+    document.startViewTransition(apply).ready.then(() => {
+      document.documentElement.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+        { duration: 600, easing: "cubic-bezier(.4, 0, .2, 1)", pseudoElement: "::view-transition-new(root)" });
+    }).catch(() => {});
+  };
+
   // Once on load: find out whether we're on synthetic data (shows the banner).
   useEffect(() => { getHealth().then(setHealth).catch(() => {}); }, []);
-  // Weather context (reference storms for the slider label + live forecast). Optional: failures are ignored.
+  // Weather reference storms label the storm slider ("Similar to the Feb 2025 storm..."). Optional: failures are ignored.
   useEffect(() => { getWeather().then(setWeather).catch(() => {}); }, []);
 
   // Language switch: tell screen readers / the browser, and forget the last answer. range_short is localized
@@ -146,7 +165,7 @@ export default function App() {
         <div className="theme-switch" role="group" aria-label={t.themeAria}>
           {[["light", <SunIcon />, t.themeLight], ["dark", <MoonIcon />, t.themeDark]].map(([code, icon, label]) => (
             <button key={code} type="button" aria-pressed={theme === code} aria-label={label} title={label}
-              onClick={() => setTheme(code)}>{icon}</button>))}
+              onClick={(e) => switchTheme(code, e)}>{icon}</button>))}
         </div>
         <nav className="view-tabs" aria-label={t.viewsAria}>
           <button type="button" aria-pressed={view === "customer"} onClick={() => setView("customer")}>{t.tabCustomer}</button>
@@ -158,8 +177,6 @@ export default function App() {
 
       {/* Customer view stays mounted while hidden, so the map, selection and chat survive a trip to the console. */}
       <main className="view" hidden={view !== "customer"}>
-        <WeatherCard weather={weather} t={t} />
-
         <ScenarioControls t={t} scenario={scenario} onScenario={setScenario} needs={needs} onToggleNeed={toggleNeed}
           referenceStorms={weather?.reference_storms ?? []}
           enrolled={enrolled} onEnrolled={setEnrolled} utilityConfirmed={utilityConfirmed} onUtilityConfirmed={setUtilityConfirmed} />

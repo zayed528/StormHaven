@@ -96,10 +96,6 @@ export const STRINGS = {
     mapView: "Map view", mapDots: "Risk dots", mapHeat: "Heatmap",
     heatLegend: "Green → red: more homes likely to lose power",
     mapLegend: "Outage risk", mapHover: (band, n) => `${band} risk${n ? ` · ${n} home${n === 1 ? "" : "s"}` : ""}`,
-    wxTitle: "Forecast for the area", live: "live", nws: "National Weather Service:",
-    wxDay: (gust) => `gusts up to ${gust} mph`, wxRain: (mm) => `, ${mm} mm rain`, wxSnow: (cm) => `, ${cm} cm snow`,
-    wxOdds: (p) => `On past days this windy, storm damage was reported somewhere in the area about ${p} of the time. Use the storm level control below to explore what a bigger storm would mean for you.`,
-    wxAria: "Weather forecast for the service area",
   },
 
   es: {
@@ -184,10 +180,6 @@ export const STRINGS = {
     mapView: "Vista del mapa", mapDots: "Puntos de riesgo", mapHeat: "Mapa de calor",
     heatLegend: "Verde → rojo: más casas que probablemente se queden sin luz",
     mapLegend: "Riesgo de apagón", mapHover: (band, n) => `Riesgo ${band.toLowerCase()}${n ? ` · ${n} casa${n === 1 ? "" : "s"}` : ""}`,
-    wxTitle: "Pronóstico para la zona", live: "en vivo", nws: "Servicio Meteorológico Nacional:",
-    wxDay: (gust) => `ráfagas de hasta ${gust} mph`, wxRain: (mm) => `, ${mm} mm de lluvia`, wxSnow: (cm) => `, ${cm} cm de nieve`,
-    wxOdds: (p) => `En días pasados con este viento, se reportaron daños por tormenta en alguna parte de la zona aproximadamente el ${p} de las veces. Use el control de nivel de tormenta para ver qué significaría una tormenta más fuerte para usted.`,
-    wxAria: "Pronóstico del tiempo para la zona de servicio",
   },
 };
 
