@@ -287,7 +287,8 @@ export default function PhoneApp() {
 
         {/* Needs ticked in the chat become the app's needs too, so the cards, alerts and texts follow them. */}
         <ChatPanel t={t} premiseId={premise} scenario={scenario} profile={profile} utilityStatus={null}
-          onNeeds={setNeeds} />
+          onNeeds={setNeeds}
+          risk={result ? { band: result.risk.band, probability: result.risk.probability, range: result.restoration.range_short } : null} />
       </div>
     </div>
   );

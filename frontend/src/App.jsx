@@ -346,7 +346,8 @@ export default function App() {
 
         {/* Needs ticked in the chat become the app's needs too, so the cards, alerts and texts follow them. */}
         <ChatPanel t={t} premiseId={premise} scenario={scenario} profile={profile} utilityStatus={utilityStatus}
-          onNeeds={setNeeds} />
+          onNeeds={setNeeds}
+          risk={result ? { band: result.risk.band, probability: result.risk.probability, range: result.restoration.range_short } : null} />
       </div>
 
       {/* One-way link: the console plans against the customer view's scenario (storm, crews, roads) and the same

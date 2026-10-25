@@ -594,3 +594,24 @@ input[type="range"] { accent-color: var(--fill); }
 
 /* the outage length after the risk title ("· if you lose power: 17-32 hours"): same line, a little lighter */
 .safety-range { font-weight: 600; }
+
+/* Chat robot greeting on page load (both apps): two bounces, then a "Hi! I am Jed..." bubble to its right. */
+@keyframes jed-bounce {
+  0%, 100% { transform: translateY(0); animation-timing-function: cubic-bezier(.3, 0, .5, 1); }
+  40% { transform: translateY(-22px); animation-timing-function: cubic-bezier(.5, 0, .7, 1); }
+  70% { transform: translateY(0) scale(1.06, .94); }
+  85% { transform: translateY(-4px); }
+}
+.chat-launcher.intro-bounce { animation: jed-bounce .6s .5s 2 both; }
+.chat-launcher { font: inherit; }
+.jed-bubble { position: absolute; left: calc(100% + 14px); top: 50%; transform: translateY(-50%); z-index: 1;
+  padding: .55rem .85rem; border-radius: 14px; white-space: nowrap; font-size: .92rem; font-weight: 600; line-height: 1.3;
+  color: var(--ink); background: var(--surface); border: 1px solid var(--line); box-shadow: 0 8px 24px var(--shadow);
+  transform-origin: left center; animation: jed-bubble-in .35s cubic-bezier(.2, .9, .3, 1.3); }
+/* the little tail pointing at the robot */
+.jed-bubble::before { content: ""; position: absolute; left: -6px; top: 50%; width: 10px; height: 10px;
+  background: var(--surface); border-left: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  transform: translateY(-50%) rotate(45deg); }
+@keyframes jed-bubble-in { from { opacity: 0; transform: translateY(-50%) scale(.6); } to { opacity: 1; transform: translateY(-50%); } }
+@media (prefers-reduced-motion: reduce) { .chat-launcher.intro-bounce, .jed-bubble { animation: none; } }
+@media (max-width: 400px) { .jed-bubble { font-size: .84rem; padding: .5rem .7rem; } }
