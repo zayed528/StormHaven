@@ -1,12 +1,15 @@
 // Storm restoration PLAN panel (operator view).   Owner: Abby
 // Backs GET /api/planner/storms + /api/planner/plan (contract in docs/API_CONTRACT.md; engine: engines/planner.py).
 // Self-contained: own fetch helper + the shared console.css classes, so it touches no one else's files.
+// Text: from t.console in i18n.js (Console passes t down); storm and equipment names go through t.tr.
 // Everything here is a MODEL ESTIMATE for planning, never a confirmed restoration time. Real AEP data only:
 // on the synthetic network both endpoints answer {available:false} and we show a clear "needs real data" note.
 import React, { useEffect, useMemo, useState } from "react";
 import createPlotlyComponent from "react-plotly.js/factory";
 import Plotly from "plotly.js-dist-min";
 import "./console.css";
+import ThemedSelect from "../components/ThemedSelect.jsx";
+import { STRINGS } from "../i18n.js";
 
 // Same small prebuilt Plotly bundle the map uses (factory import keeps the build fast).
 const Plot = createPlotlyComponent(Plotly);
@@ -34,7 +37,9 @@ function chartColors() {
   };
 }
 
-export default function PlannerPanel() {
+// aside = extra content for the top of the right-hand column (the console's popup buttons).
+export default function PlannerPanel({ t = STRINGS.en, aside = null }) {
+  const c = t.console;
   // --- controls (the knobs an operator turns) ---
   const [stormId, setStormId] = useState(null);
   const [crews, setCrews] = useState(20);
@@ -80,109 +85,108 @@ export default function PlannerPanel() {
       x: plan.restore_curve.map((d) => d.hour),
       y: plan.restore_curve.map((d) => d.pct_restored),
       type: "scatter", mode: "lines", line: { color: ck.line, width: 2 },
-      hovertemplate: "%{y:.0f}% back by hour %{x:.0f}<extra></extra>",
+      hovertemplate: c.curveHover,
     }];
-  }, [plan, ck.line]);
+  }, [plan, ck.line, c]);
 
   // --- render ---
   if (available === false) {
     return (
-      <section className="planner" aria-label="Storm restoration plan">
-        <h3>Storm restoration plan</h3>
-        <p className="console-muted">Storm replay needs the real AEP network. Run <code>make data</code> and
-          restart the API, then reload.</p>
+      <section className="planner" aria-label={c.planTitle}>
+        <h3>{c.planTitle}</h3>
+        <p className="console-muted">{c.needsData} <code>make data</code> {c.needsData2}</p>
       </section>
     );
   }
 
-  const fmtH = (h) => (h == null ? "—" : h >= 48 ? `${(h / 24).toFixed(1)} d` : `${Math.round(h)} h`);
+  const fmtH = (h) => (h == null ? "—" : h >= 48 ? `${(h / 24).toFixed(1)} ${c.dayUnit}` : `${Math.round(h)} h`);
 
   return (
-    <section className="planner" aria-label="Storm restoration plan">
-      <header className="console-head">
-        <h3>Storm restoration plan</h3>
+    <section className="planner" aria-label={c.planTitle}>
+      <header className="console-head planner-head">
+        <h3>{c.planTitle}</h3>
         <div className="console-knobs">
-          <label>Storm
-            <select value={stormId ?? ""} onChange={(e) => setStormId(e.target.value || null)}>
-              {storms === null && <option>Loading…</option>}
-              {storms?.map((s) => (
-                <option key={s.storm_id} value={s.storm_id}>{s.label ?? s.storm_id}</option>))}
-            </select>
-          </label>
-          <label>Crews: {crews}
+          <ThemedSelect label={c.storm} value={stormId} placeholder={c.loading} onChange={setStormId}
+            options={(storms ?? []).map((s) => ({ value: s.storm_id, label: t.tr(s.label ?? s.storm_id) }))} />
+          <label>{c.crews(crews)}
             <input type="range" min="1" max="200" value={crews} onChange={(e) => setCrews(+e.target.value)} />
           </label>
-          <label>Crew size: {crewSize}
+          <label>{c.crewSize(crewSize)}
             <input type="range" min="2" max="8" value={crewSize} onChange={(e) => setCrewSize(+e.target.value)} />
           </label>
-          <label>Road access
-            <select value={roadAccess} onChange={(e) => setRoadAccess(e.target.value)}>
-              {ACCESS.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </label>
+          <ThemedSelect label={c.roadAccess} value={roadAccess} onChange={setRoadAccess}
+            options={ACCESS.map((a) => ({ value: a, label: c.roads[a] }))} />
         </div>
       </header>
 
-      {error && <p className="console-error" role="alert">Couldn't reach the planner: {error}</p>}
-      {!plan ? <p className="console-muted">Loading plan…</p> : (
-        <div className={loading ? "planner-body loading" : "planner-body"} aria-busy={loading}>
-          {/* Headline numbers: the scale of the storm and how long to full restoration. */}
-          <div className="planner-headline">
-            <div><span className="big">{plan.customers_out?.toLocaleString()}</span><span>customers out</span></div>
-            <div><span className="big">{Math.round(plan.total_person_hours).toLocaleString()}</span><span>person-hours of work</span></div>
-            <div><span className="big">{fmtH(plan.hours_to_restore?.all)}</span><span>until everyone is back</span></div>
-            <div><span className="big">{plan.critical_devices}</span><span>critical facilities affected</span></div>
-          </div>
-
-          {/* Restoration curve: % of customers restored over time. */}
-          <div className="planner-curve">
-            <h4>Restoration over time <span className="console-muted">(% of customers back)</span></h4>
-            {curve && (
-              <Plot data={curve}
-                layout={{
-                  height: 220, margin: { l: 40, r: 10, t: 6, b: 34 },
-                  // Theme-aware: axis labels/ticks use --ink and gridlines use --line, so text stays readable
-                  // on the dark panel (previously it defaulted to near-black and vanished in dark mode).
-                  font: { color: ck.text },
-                  xaxis: { title: "hours", zeroline: false, color: ck.text, gridcolor: ck.grid },
-                  yaxis: { range: [0, 100], ticksuffix: "%", color: ck.text, gridcolor: ck.grid },
-                  paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-                }}
-                config={{ displayModeBar: false, responsive: true }}
-                style={{ width: "100%" }} />)}
-          </div>
-
-          {/* Crews-needed to hit each target. crews_needed === null => target can't be met. */}
-          <div className="planner-targets">
-            <h4>Crews needed to restore everyone by…</h4>
-            <table className="console-audit">
-              <thead><tr><th>Target</th><th>Crews</th><th>People</th><th>With current crews?</th></tr></thead>
-              <tbody>
-                {plan.targets?.map((t) => (
-                  <tr key={t.days}>
-                    <td>{t.days === 7 ? "1 week" : `${t.days} days`}</td>
-                    <td>{t.crews_needed ?? "can't be met"}</td>
-                    <td>{t.people_needed ?? "—"}</td>
-                    <td>{t.crews_needed == null ? "—" : t.met_with_current_crews ? "✅ yes" : "❌ need more"}</td>
-                  </tr>))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* First repairs the plan schedules, highest value first; critical facilities flagged. */}
-          <div className="planner-jobs">
-            <h4>First repairs <span className="console-muted">(most customers restored first)</span></h4>
-            <ol className="console-order">
-              {plan.first_jobs?.map((j) => (
-                <li key={j.order} className={j.feeds_critical_facility ? "critical" : ""}>
-                  <strong>{j.equipment}</strong> — {j.customers_behind_it?.toLocaleString()} customers · {j.person_hours} person-h
-                  · crews start ~h{Math.round(j.first_crew_hour)}
-                  {j.feeds_critical_facility && <span className="planner-crit"> ⚑ feeds a critical facility</span>}
-                </li>))}
-            </ol>
-          </div>
+      {error && <p className="console-error" role="alert">{c.planError(error)}</p>}
+      {/* Two columns that fit the screen: the restoration curve (left, large) and the details (right, scrolls
+          on its own if it has to). */}
+      <div className={`planner-split${loading ? " loading" : ""}`} aria-busy={loading}>
+        <div className="planner-left">
+          {!plan ? <p className="console-muted">{c.loadingPlan}</p> : (<>
+            {/* Headline numbers: the scale of the storm and how long to full restoration. */}
+            <div className="planner-headline">
+              <div><span className="big">{plan.customers_out?.toLocaleString(t.locale)}</span><span>{c.customersOut}</span></div>
+              <div><span className="big">{Math.round(plan.total_person_hours).toLocaleString(t.locale)}</span><span>{c.personHours}</span></div>
+              <div><span className="big">{fmtH(plan.hours_to_restore?.all)}</span><span>{c.untilAll}</span></div>
+              <div><span className="big">{plan.critical_devices}</span><span>{c.criticalAffected}</span></div>
+            </div>
+            {/* Restoration curve: % of customers restored over time. Fills the rest of the column. */}
+            <div className="planner-curve">
+              <h4>{c.curveTitle} <span className="console-muted">{c.curveNote}</span></h4>
+              <div className="planner-plot">
+                {curve && (
+                  <Plot data={curve} useResizeHandler
+                    layout={{
+                      autosize: true, margin: { l: 44, r: 12, t: 8, b: 40 },
+                      // Theme-aware: axis labels/ticks use --ink and gridlines use --line, so text stays readable
+                      // on the dark panel (previously it defaulted to near-black and vanished in dark mode).
+                      font: { color: ck.text },
+                      xaxis: { title: c.hoursAxis, zeroline: false, color: ck.text, gridcolor: ck.grid },
+                      yaxis: { range: [0, 100], ticksuffix: "%", color: ck.text, gridcolor: ck.grid },
+                      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+                    }}
+                    config={{ displayModeBar: false, responsive: true }}
+                    style={{ width: "100%", height: "100%" }} />)}
+              </div>
+            </div>
+          </>)}
         </div>
-      )}
+
+        <div className="planner-right">
+          {aside}
+          {plan && (<>
+            {/* Crews-needed to hit each target. crews_needed === null => target can't be met. */}
+            <div className="planner-targets">
+              <h4>{c.crewsNeeded}</h4>
+              <table className="console-audit">
+                <thead><tr>{c.targetCols.map((h) => <th key={h}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {plan.targets?.map((tg) => (
+                    <tr key={tg.days}>
+                      <td>{c.target(tg.days)}</td>
+                      <td>{tg.crews_needed ?? c.cantMeet}</td>
+                      <td>{tg.people_needed ?? "—"}</td>
+                      <td>{tg.crews_needed == null ? "—" : tg.met_with_current_crews ? c.metYes : c.metNo}</td>
+                    </tr>))}
+                </tbody>
+              </table>
+            </div>
+            {/* First repairs the plan schedules, highest value first; critical facilities flagged. */}
+            <div className="planner-jobs">
+              <h4>{c.firstRepairs} <span className="console-muted">{c.firstRepairsNote}</span></h4>
+              <ol className="console-order">
+                {plan.first_jobs?.map((j) => (
+                  <li key={j.order} className={j.feeds_critical_facility ? "critical" : ""}>
+                    <strong>{t.tr(j.equipment)}</strong>{c.job(j.customers_behind_it?.toLocaleString(t.locale), j.person_hours, Math.round(j.first_crew_hour))}
+                    {j.feeds_critical_facility && <span className="planner-crit">{c.critFlag}</span>}
+                  </li>))}
+              </ol>
+            </div>
+          </>)}
+        </div>
+      </div>
     </section>
   );
 }

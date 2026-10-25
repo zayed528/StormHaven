@@ -83,6 +83,12 @@ const EXACT = {
   "Show 911 + safety message immediately; route to emergency queue":
     "Mostrar de inmediato el 911 y el mensaje de seguridad; enviar a la fila de emergencias",
   "Fall back to area-level message; offer human contact": "Usar un mensaje a nivel de zona; ofrecer contacto con una persona",
+  // console.py / planner: escalation triggers and operator equipment labels
+  "Would trigger for any customer who has declared a medical need (none assumed)":
+    "Se activaría para cualquier cliente que haya declarado una necesidad médica (no se supone ninguna)",
+  "Model confidence Low or location unmatched": "Confianza del modelo baja o ubicación no encontrada",
+  "Circuit breaker": "Interruptor principal", "Automatic switch": "Interruptor automático", "Fuse": "Fusible",
+  "Substation": "Subestación", "Transformer": "Transformador", "Voltage transformer": "Transformador de voltaje",
   // ai/agent.py offline replies
   "I couldn't match your location to our data, so I can't make a reliable prediction. Please check AEP's official outage map.":
     "No pude relacionar su ubicación con nuestros datos, así que no puedo hacer una predicción confiable. Consulte el mapa oficial de apagones de AEP.",
@@ -116,6 +122,11 @@ const RULES = [
   [/^(\d+) crews available storm-wide\.$/, (n) => `${n} cuadrillas disponibles en toda la zona afectada.`],
   [/^Road access: (normal|limited|blocked)\.$/, (r) => `Acceso por carretera: ${ROAD[r]}.`],
   [/^Each repair crew has (\d+) people\.$/, (n) => `Cada cuadrilla de reparación tiene ${n} personas.`],
+  // alerts.py escalation triggers (console)
+  [/^Declared medical need and estimated outage > (\d+) hrs$/, (h) => `Necesidad médica declarada y apagón estimado de más de ${h} h`],
+  // planner storm names: "Feb 2025 storm"
+  [/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4}) storm$/, (m, y) => `Tormenta de ${{ Jan: "ene.", Feb: "feb.", Mar: "mar.",
+    Apr: "abr.", May: "mayo", Jun: "jun.", Jul: "jul.", Aug: "ago.", Sep: "sept.", Oct: "oct.", Nov: "nov.", Dec: "dic." }[m]} ${y}`],
   // alerts.py eligibility reasons
   [/^Outage risk is (.+?) — meets the pre-storm alert threshold\.$/,
     (b) => `El riesgo de apagón es ${BAND[b] ?? b}: cumple el umbral para recibir alertas antes de la tormenta.`],
