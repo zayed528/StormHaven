@@ -16,6 +16,13 @@ client = TestClient(app)
 PREMISE = "P-31111"
 
 
+@pytest.fixture(autouse=True)
+def disable_bedrock_by_default(monkeypatch):
+    """Keep chat tests deterministic; tests needing Bedrock install FakeBedrock explicitly."""
+    monkeypatch.delenv("BEDROCK_MODEL_ID", raising=False)
+    monkeypatch.setattr(agent, "get_client", lambda: None)
+
+
 def _decision(answer_type: str = "overview", **extra) -> dict:
     text = json.dumps({"answer_type": answer_type, **extra})
     return {"stopReason": "end_turn", "output": {"message": {
