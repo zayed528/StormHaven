@@ -85,6 +85,17 @@ export default function App() {
     try { localStorage.setItem(THEME_KEY, theme); } catch { /* blocked: the choice just lasts this visit */ }
   }, [theme]);
 
+  // Switching views: the page slides sideways, the console coming in from the right and the customer view back from
+  // the left (View Transitions API; data-vt picks the direction in styles.css). Instant without it or with reduced motion.
+  const switchView = (next) => {
+    if (next === view) return;
+    const apply = () => flushSync(() => setView(next));
+    if (!document.startViewTransition || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { apply(); return; }
+    const root = document.documentElement;
+    root.dataset.vt = next === "console" ? "to-console" : "to-customer";
+    document.startViewTransition(apply).finished.finally(() => { delete root.dataset.vt; });
+  };
+
   // Switching themes: the new theme spreads in a circle from the button that was clicked (View Transitions API).
   // Browsers without it, and people who turn off animations, get the instant switch.
   const switchTheme = (code, e) => {
@@ -227,15 +238,15 @@ export default function App() {
   }, [showDock, premise]);
 
   return (
-    <div className={`app${view === "customer" ? " full-map" : ""}${showDock ? " has-dock" : ""}`}>
+    <div className={`app${view === "customer" ? " full-map" : " console-mode"}${showDock ? " has-dock" : ""}`}>
       {/* First Tab stop when the answer is showing: the map can't be used from a keyboard, so jump to the answer. */}
       {showDock && <a className="skip-link" href="#results">{t.skipToResults}</a>}
       <header className="topbar" ref={headerRef}>
         <div className="header-row">
           <h1>StormHaven</h1>
           <nav className="view-tabs" aria-label={t.viewsAria}>
-            <button type="button" aria-pressed={view === "customer"} onClick={() => setView("customer")}>{t.tabCustomer}</button>
-            <button type="button" aria-pressed={view === "console"} onClick={() => setView("console")}>{t.tabConsole}</button>
+            <button type="button" aria-pressed={view === "customer"} onClick={() => switchView("customer")}>{t.tabCustomer}</button>
+            <button type="button" aria-pressed={view === "console"} onClick={() => switchView("console")}>{t.tabConsole}</button>
           </nav>
           <div className="header-actions">
             {view === "customer" && !onboarding && (
@@ -292,7 +303,7 @@ export default function App() {
         <ChatPanel t={t} premiseId={premise} scenario={scenario} profile={profile} utilityStatus={utilityStatus} />
       </div>
 
-      {view === "console" && <main className="view"><Console /></main>}
+      {view === "console" && <main className="view"><Console t={t} /></main>}
     </div>
   );
 }
