@@ -378,6 +378,7 @@ def test_greeting_uses_nova_conversational_response(monkeypatch):
     response = _post(_question("Hi"))
 
     assert response.status_code == 200
+    assert response.json()["reply"].startswith("Hi! I'm Jed.")
     assert "can explain" in response.json()["reply"]
 
 
