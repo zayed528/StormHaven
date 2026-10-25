@@ -539,3 +539,8 @@ input[type="range"] { accent-color: var(--fill); }
 /* All three cards share one height and start at the top, so their first lines (How long / the risk line / Alerts)
    sit level instead of the shorter card hanging lower. */
 .dock .cols { align-items: stretch; }
+
+/* Planner bridge line in the "How long" card: a real-storm comparison (AEP crews + days to restore).
+   An info-tinted callout, so it reads as evidence behind the estimate, not just more body text. */
+.storm-context { margin: .5rem 0 0; padding: .5rem .7rem; font-size: .9rem; border-left: 4px solid var(--accent);
+  background: var(--tint-info); border-radius: 0 6px 6px 0; }

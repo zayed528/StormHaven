@@ -68,6 +68,10 @@ export default function ResultsPanel({ t, result, changes, notifyRequest, whatIf
         <article key="howlong" className="card card-howlong" style={{ "--i": i }} tabIndex={0}><h2>{t.howLong}</h2>
           <p key={`r${k}`} className={flash(changes?.range).trim()}><strong>{t.tr(restoration.range_text)}</strong>
             {changes?.range && <span className="was"> {t.was} <s>{fmtRange(changes.range, t)}</s></span>}</p>
+          {/* The planner bridge: one line connecting this estimate to how a similar REAL storm was restored
+              (AEP crews + days-to-back). Only present for storms close to a real one; backend sentence, so t.tr. */}
+          {!fallback && restoration.storm_context && (
+            <p className="storm-context">{t.tr(restoration.storm_context)}</p>)}
           {!fallback && (<>
             {/* What if...? The forecast storm is the starting point; these try a different storm, roads, or crews. */}
             <div className="whatif" role="group" aria-labelledby="whatif-title">
