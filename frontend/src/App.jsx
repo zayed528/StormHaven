@@ -19,6 +19,8 @@ const ONBOARDING = import.meta.glob("./onboarding/Onboarding.jsx", { eager: true
 const Onboarding = ONBOARDING["./onboarding/Onboarding.jsx"]?.default ?? OnboardingStandIn;
 // "What if...? 50% more crews": the same comparison the engine's own driver line makes (int(20 x 1.5) + 1).
 const BASE_CREWS = 20, MORE_CREWS = 31;
+// Operator APIs are disabled in public deployments. Internal builds may opt in explicitly.
+const ENABLE_OPERATOR_CONSOLE = import.meta.env.VITE_ENABLE_OPERATOR_CONSOLE === "1";
 
 // Which real storm the customer's answer was compared with (the planner replay behind the "In our replay of the
 // ... storm" sentence). The console replays the same storm. TEMPORARY: the answer doesn't name the storm by ID yet,
@@ -281,7 +283,9 @@ export default function App() {
           <h1>StormHaven</h1>
           <nav className="view-tabs" aria-label={t.viewsAria}>
             <button type="button" aria-pressed={view === "customer"} onClick={() => switchView("customer")}>{t.tabCustomer}</button>
-            {health && !publicDemo && <button type="button" aria-pressed={view === "console"} onClick={() => switchView("console")}>{t.tabConsole}</button>}
+            {health && !publicDemo && ENABLE_OPERATOR_CONSOLE && (
+              <button type="button" aria-pressed={view === "console"} onClick={() => switchView("console")}>{t.tabConsole}</button>
+            )}
           </nav>
           <div className="header-actions">
             {view === "customer" && !onboarding && (

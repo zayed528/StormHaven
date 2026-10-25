@@ -102,6 +102,29 @@ export default function Onboarding({ t, onComplete, publicDemo = false, demoLoca
             <span className="ob-hint">{o.premiseHint}</span>
           </label>
 
+          {/* "Where's my Premise ID?" helper: a GENERIC sample statement (no AEP branding) showing a FAKE
+              9-digit number, so users know what to look for. Collapsed by default to keep the screen clean.
+              The sample id is made up (123456789) — never a real premise id.
+              NOTE: strings fall back to English inline until Nandan adds them to i18n.js (o.helpSummary etc.),
+              so the box reads correctly before the i18n keys land. */}
+          <details className="ob-help">
+            <summary>{o.helpSummary ?? "Where's my Premise ID?"}</summary>
+            <div className="ob-bill" role="img" aria-label={o.billAria ?? "Example statement showing where the Premise ID appears"}>
+              <div className="ob-bill-head">
+                <span className="ob-bill-logo" aria-hidden="true">⚡</span>
+                <span className="ob-bill-title">{o.billTitle ?? "Sample statement"}</span>
+              </div>
+              <div className="ob-bill-rows">
+                <div><span>{o.billName ?? "Name"}</span><b>Jane Doe</b></div>
+                <div><span>{o.billService ?? "Service address"}</span><b>123 Example St</b></div>
+                <div className="ob-bill-highlight"><span>{o.premiseLabel ?? "Premise ID"}</span><b>123456789</b></div>
+                <div><span>{o.billAmount ?? "Amount due"}</span><b>$84.20</b></div>
+              </div>
+              <p className="ob-bill-note">{o.helpNote
+                ?? "Look for the 9-digit number labeled \u201cPremise ID\u201d on your statement. This is a made-up example."}</p>
+            </div>
+          </details>
+
           <label className="check ob-enroll">
             <input type="checkbox" checked={enrolled} onChange={() => setEnrolled(!enrolled)} />{o.enroll}</label>
 
