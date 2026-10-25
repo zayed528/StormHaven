@@ -8,7 +8,7 @@ Returns exactly what OutageMap needs to zoom in: {valid, map_point_id, center:{l
 just centers on it. Invalid IDs / out-of-area coordinates get a friendly, non-crashing fallback.
 
 Privacy: a premise is placed at its TRANSFORMER's (already-published, map-level) coordinates, never a home
-location. We return a neighborhood dot id and a map view, nothing else — no address, no device IDs..
+location. We return a neighborhood dot id and a map view, nothing else — no address, no device IDs.
 """
 from __future__ import annotations
 
