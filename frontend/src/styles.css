@@ -246,3 +246,23 @@ input[type="range"] { accent-color: var(--fill); }
   .chat:not([hidden]), .theme-switch button[aria-pressed="true"] svg { animation: none; }
   .chat-launcher, .chat-launcher:hover, .chat-launcher[aria-expanded="true"] { transition: none; transform: none; }
 }
+/* onboarding (first screen) + the small text-style buttons (skip / start over) */
+.onboard-view { max-width: 560px; justify-items: start; }
+.onboard { display: grid; gap: .8rem; width: 100%; box-sizing: border-box; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; padding: 1.25rem; }
+.onboard h2 { margin: 0; font-size: 1.3rem; }
+.onboard .muted { margin: 0; }
+.onboard-field { display: grid; gap: .3rem; font-weight: 600; }
+.onboard-field input { padding: .6rem; font: inherit; font-weight: 400; }
+.onboard fieldset { border: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: .4rem 1.1rem; margin: 0; }
+.onboard-go { justify-self: start; padding: .65rem 1.3rem; font: inherit; font-weight: 600; border: none; border-radius: 6px;
+  background: var(--fill); color: var(--on-fill); cursor: pointer; }
+.onboard-go:disabled { opacity: .55; cursor: not-allowed; }
+.link-button { border: none; background: none; padding: 0; font: inherit; color: var(--accent); text-decoration: underline;
+  cursor: pointer; }
+@media (max-width: 600px) { .onboard-go, .onboard-field input { min-height: 44px; } .onboard-go { justify-self: stretch; } }
+/* The page column never grows to fit its content. The map is created while hidden behind onboarding, so Plotly
+   starts at its 700 px fallback width; without this, that stretched the whole page to 700 px on phones.
+   With it, the map is clipped to the column and re-measures itself to the real width. */
+.view { grid-template-columns: minmax(0, 1fr); }
+.map { min-width: 0; overflow: hidden; }

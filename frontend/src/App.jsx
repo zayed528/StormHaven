@@ -6,8 +6,15 @@ import ScenarioControls from "./components/ScenarioControls.jsx";
 import ResultsPanel from "./components/ResultsPanel.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
 import Console from "./console/Console.jsx";          // Abby's utility console (fetches its own data)
+import OnboardingStandIn from "./components/OnboardingStandIn.jsx";
 import { getConcierge, getHealth, getMap, getWeather } from "./api/client.js";
 import { STRINGS, fmtRange } from "./i18n.js";
+
+// Onboarding (first screen): Abby's onboarding/Onboarding.jsx as soon as that file exists, else the stand-in.
+// import.meta.glob finds nothing (instead of failing the build) while her file isn't merged yet.
+const ONBOARDING = import.meta.glob("./onboarding/Onboarding.jsx", { eager: true });
+const Onboarding = ONBOARDING["./onboarding/Onboarding.jsx"]?.default ?? OnboardingStandIn;
+const NEIGHBORHOOD_ZOOM = 14;   // map zoom for "your neighborhood" (same as /api/locate's hint)
 
 // Theme: the visitor's saved choice, else their computer's setting. index.html applies the same rule before the
 // first paint, so there is no white flash; this keeps React in sync with it. Storage can be blocked: ignore errors.
@@ -48,6 +55,8 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [changes, setChanges] = useState(null);    // what moved vs. the previous answer, for the highlight
   const [error, setError] = useState(null);
+  const [onboarding, setOnboarding] = useState(true);   // first screen until the customer finishes (or skips) it
+  const [focus, setFocus] = useState(null);            // {lat, lon, zoom, key}: zoom the map to the customer's area
   const t = STRINGS[lang];
   // The last answer shown for THIS location: its range + the scenario behind it. Sent back so the
   // "estimate updated" message can say old -> new and give the real reason. Refs (not state) because
@@ -57,6 +66,9 @@ export default function App() {
   const shownPrev = useRef({ range: null, scenario: null });
   // Set when a location is chosen with the keyboard (premise ID form): move focus to the answer when it arrives.
   const focusResults = useRef(false);
+  // Set when a location is ENTERED (onboarding or premise ID box) without a zoom target: when the answer arrives,
+  // zoom to the dot it names (map_point_id). Clicking a dot doesn't zoom: the customer is already looking at it.
+  const zoomToResult = useRef(false);
 
   // Only declared needs and channel TYPES are sent; no names, phone numbers, or addresses.
   const profile = { declared_needs: needs, alerts_enrolled: enrolled, channels: enrolled ? ["sms"] : [], language: lang };
@@ -101,7 +113,36 @@ export default function App() {
   }, [lang]);
 
   // Plotly measures its box while hidden as 0 px; nudge it to re-measure when the customer view comes back.
-  useEffect(() => { if (view === "customer") setTimeout(() => window.dispatchEvent(new Event("resize")), 50); }, [view]);
+  useEffect(() => {
+    if (view === "customer" && !onboarding) setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
+  }, [view, onboarding]);
+
+  // Zoom to the customer's neighborhood once their answer names the map dot (when no zoom target was given).
+  useEffect(() => {
+    if (!zoomToResult.current || !result?.map_point_id || !layers) return;
+    const dot = layers.premises.find((p) => p.id === result.map_point_id);
+    zoomToResult.current = false;
+    if (dot) setFocus({ lat: dot.lat, lon: dot.lon, zoom: NEIGHBORHOOD_ZOOM, key: Date.now() });
+  }, [result, layers]);
+
+  // Onboarding finished (contract: onboarding/Onboarding.jsx). Feed it into the state the app already has.
+  const onboarded = (p) => {
+    if (p.language === "en" || p.language === "es") setLang(p.language);
+    setNeeds(p.declared_needs ?? []);
+    setEnrolled(!!p.alerts_enrolled);
+    setTyped(p.premise_id);
+    setPremise(p.premise_id);
+    if (p.center) setFocus({ lat: p.center.lat, lon: p.center.lon, zoom: p.zoom ?? NEIGHBORHOOD_ZOOM, key: Date.now() });
+    else zoomToResult.current = true;
+    focusResults.current = true;
+    setOnboarding(false);
+  };
+  // "Start over": back to onboarding with a clean slate and the whole-territory map.
+  const restart = () => {
+    setPremise(null); setResult(null); setChanges(null); setTyped(""); setFocus(null);
+    last.current = { premise: null, range: null, scenario: null, result: null };
+    setOnboarding(true);
+  };
 
   // Map colors depend only on storm strength, so refetch the map only when severity changes.
   // Debounced: the real-data map is ~1 MB and takes ~1 s, so don't fire on every slider tick.
@@ -147,7 +188,7 @@ export default function App() {
   return (
     <div className="app">
       {/* First Tab stop: the map can't be used from a keyboard, so jump straight to the premise ID box. */}
-      <a className="skip-link" href="#premise-id">{t.skipToLookup}</a>
+      {!onboarding && <a className="skip-link" href="#premise-id">{t.skipToLookup}</a>}
       <header>
         <div className="header-row">
           <h1>StormHaven</h1>
@@ -171,19 +212,27 @@ export default function App() {
           <button type="button" aria-pressed={view === "customer"} onClick={() => setView("customer")}>{t.tabCustomer}</button>
           <button type="button" aria-pressed={view === "console"} onClick={() => setView("console")}>{t.tabConsole}</button>
         </nav>
-        {view === "customer" && <p>{t.intro}</p>}
+        {view === "customer" && !onboarding && (
+          <p>{t.intro} <button type="button" className="link-button" onClick={restart}>{t.onboardRestart}</button></p>)}
         {health?.synthetic_data && <p className="banner">{t.synthetic}</p>}
       </header>
 
-      {/* Customer view stays mounted while hidden, so the map, selection and chat survive a trip to the console. */}
-      <main className="view" hidden={view !== "customer"}>
+      {view === "customer" && onboarding && (
+        <main className="view onboard-view">
+          <Onboarding t={t} onComplete={onboarded} />
+          <button type="button" className="link-button" onClick={() => setOnboarding(false)}>{t.onboardSkip}</button>
+        </main>)}
+
+      {/* Customer view stays mounted while hidden (behind onboarding or the console), so the map has loaded by the
+          time it's shown and the selection and chat survive a trip to the console. */}
+      <main className="view" hidden={view !== "customer" || onboarding}>
         <ScenarioControls t={t} scenario={scenario} onScenario={setScenario} needs={needs} onToggleNeed={toggleNeed}
           referenceStorms={weather?.reference_storms ?? []}
           enrolled={enrolled} onEnrolled={setEnrolled} utilityConfirmed={utilityConfirmed} onUtilityConfirmed={setUtilityConfirmed} />
 
         <form className="locate" onSubmit={(e) => {
           e.preventDefault();
-          if (typed.trim()) { focusResults.current = true; setPremise(typed.trim()); }
+          if (typed.trim()) { focusResults.current = true; zoomToResult.current = true; setPremise(typed.trim()); }
         }}>
           <label htmlFor="premise-id">{t.locateLabel}</label>
           <input id="premise-id" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={t.locatePlaceholder} />
@@ -192,7 +241,8 @@ export default function App() {
 
         {/* Ring the dot the backend says represents this location (works for typed premise IDs too). */}
         <div className="map" role="region" aria-label={t.mapAria}>
-          <OutageMap t={t} dark={theme === "dark"} layers={layers} selectedId={result?.map_point_id ?? premise} onSelect={setPremise} />
+          <OutageMap t={t} dark={theme === "dark"} layers={layers} focus={focus}
+            selectedId={result?.map_point_id ?? premise} onSelect={setPremise} />
         </div>
 
         {error && <p role="alert" className="error">{t.apiError(error)}</p>}
