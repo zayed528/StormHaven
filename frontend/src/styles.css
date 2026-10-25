@@ -100,6 +100,16 @@ figure { margin: .5rem 0 0; } figcaption { font-size: .8rem; font-weight: 600; c
 .locate button { padding: .4rem .9rem; font: inherit; }
 
 /* chat: suggested questions, AI label, thinking line, fixed safety message */
+.chat-needs { display: grid; gap: .55rem; margin: .5rem 0; padding: .7rem; border: 1px solid var(--line);
+  border-radius: .6rem; background: var(--bg); }
+.chat-needs legend { padding: 0 .25rem; color: var(--ink); font-size: .78rem; font-weight: 700; }
+.chat-needs p { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.3; }
+.chat-needs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem .5rem; }
+.chat-need-option { display: flex; gap: .4rem; align-items: center; min-width: 0; padding: .35rem .4rem;
+  border: 1px solid transparent; border-radius: .35rem; font-size: .76rem; line-height: 1.2; cursor: pointer; }
+.chat-need-option:hover { border-color: var(--line); background: var(--surface); }
+.chat-need-option input { flex: 0 0 auto; width: .95rem; height: .95rem; margin: 0; accent-color: var(--accent); }
+.chat-needs button { justify-self: start; margin-top: .1rem; padding: .4rem .7rem; font-size: .78rem; }
 .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .5rem; }
 .chips button { padding: .35rem .75rem; border: 1px solid var(--tint-info-line); background: var(--tint-info); color: var(--ink);
   border-radius: 999px; font: inherit; font-size: .9rem; cursor: pointer; }

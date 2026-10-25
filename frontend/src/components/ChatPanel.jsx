@@ -38,6 +38,8 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
   const [needHome, setNeedHome] = useState(false);
   const [error, setError] = useState(null);
   const [failedRequest, setFailedRequest] = useState(null);
+  const [preparationNeeds, setPreparationNeeds] = useState(null);
+  const [selectedPreparationNeeds, setSelectedPreparationNeeds] = useState([]);
   const logRef = useRef(null);
   const inputRef = useRef(null);
   const launcherRef = useRef(null);
@@ -57,6 +59,8 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
     setError(null);
     setFailedRequest(null);
     setNeedHome(false);
+    setPreparationNeeds(null);
+    setSelectedPreparationNeeds([]);
     return () => gateRef.current.invalidate();
   }, [contextKey]);
 
@@ -72,7 +76,7 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
 
   const close = () => { setOpen(false); launcherRef.current?.focus(); };
 
-  const submitHistory = async (next, question) => {
+  const submitHistory = async (next, question, requestProfile = profile) => {
     if (!premiseId) return;
     const token = gateRef.current.begin(contextKey);
     if (!token) return;
@@ -86,7 +90,7 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
         history: next,
         premise_id: requestedPremise,
         scenario,
-        profile,
+        profile: requestProfile,
         utility_status: utilityStatus,
       }, { signal: token.signal });
       if (!reply.startsWith(SAFETY_PREFIX) && ES_EMERGENCY.test(question)) {
@@ -105,13 +109,36 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
     }
   };
 
+  const preparationQuestion = (question) => /prepare|preparation/i.test(question);
+
   const ask = (value) => {
     const question = value.trim();
     if (!question || gateRef.current.isInFlight()) return;
     if (!premiseId) { setNeedHome(true); return; }
+    if (preparationQuestion(question) && !profile.declared_needs?.length) {
+      setSelectedPreparationNeeds([]);
+      setPreparationNeeds(question);
+      return;
+    }
     const next = boundedHistory(history, question);
     setText("");
     submitHistory(next, question);
+  };
+  const togglePreparationNeed = (need) => {
+    setSelectedPreparationNeeds((current) => current.includes(need)
+      ? current.filter((item) => item !== need)
+      : [...current, need]);
+  };
+  const continuePreparation = () => {
+    if (!preparationNeeds || gateRef.current.isInFlight()) return;
+    const next = boundedHistory(history, preparationNeeds);
+    const requestProfile = {
+      ...profile,
+      declared_needs: [...new Set([...(profile.declared_needs || []), ...selectedPreparationNeeds])],
+    };
+    setPreparationNeeds(null);
+    setText("");
+    submitHistory(next, preparationNeeds, requestProfile);
   };
   const retry = () => {
     if (failedRequest && !gateRef.current.isInFlight()) {
@@ -139,6 +166,22 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
         {suggestions.map((q) => (
           <button key={q} type="button" onClick={() => ask(q)} disabled={busy}>{q}</button>))}
       </div>
+      {preparationNeeds && (
+          <fieldset className="chat-needs">
+            <legend>{t.needsChatAria}</legend>
+            <p>{t.needsChatIntro}</p>
+            <div className="chat-needs-grid">
+            {Object.entries(t.needs).map(([need, label]) => (
+              <label key={need} className="chat-need-option">
+                <input type="checkbox" checked={selectedPreparationNeeds.includes(need)}
+                  onChange={() => togglePreparationNeed(need)} />
+                {label}
+              </label>
+            ))}
+            </div>
+            <button type="button" onClick={continuePreparation}>{t.needsChatContinue}</button>
+          </fieldset>
+      )}
       <div className="chat-log" ref={logRef} aria-live="polite">
         {history.map((m, i) => m.role === "assistant"
           ? <AssistantMsg key={i} t={t} text={m.content[0].text} />

@@ -4,6 +4,7 @@ Run:  make api   (or: cd backend && uvicorn app.main:app --reload)
 Docs at http://localhost:8000/docs  (frontend team: this is the contract)
 """
 from __future__ import annotations
+import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,16 +24,31 @@ from app.service import run_concierge                           # noqa: E402
 from app.weather import weather_context                         # noqa: E402
 
 app = FastAPI(title="StormHaven API", version="0.1.0")
-# Open CORS so a separately hosted frontend (Amplify) can call the API. Tighten to the real origin at deploy.
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+def _env_enabled(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes"}
+
+
+def _cors_origins() -> list[str]:
+    configured = [origin.strip() for origin in os.getenv("STORMHAVEN_CORS_ORIGINS", "").split(",") if origin.strip()]
+    if _env_enabled("STORMHAVEN_PRODUCTION"):
+        if not configured or "*" in configured:
+            raise RuntimeError("STORMHAVEN_CORS_ORIGINS must contain explicit origins in production")
+        return configured
+    return configured or ["http://localhost:5173"]
+
+
+app.add_middleware(CORSMiddleware, allow_origins=_cors_origins(), allow_methods=["GET", "POST", "OPTIONS"],
+                   allow_headers=["Content-Type", "Authorization"])
 # Compress responses over 1 KB: the real-data map payload is several MB of numbers and shrinks ~5-10x.
 app.add_middleware(GZipMiddleware, minimum_size=1000)
-# Utility operator console (read-only, GET /api/console/*): app/console.py.
-app.include_router(console_router)
-# Storm restoration planner (read-only, GET /api/planner/*): app/planner_routes.py + engines/planner.py.
-app.include_router(planner_router)
-# Proactive-alert sender (POST /api/notify): app/notify/router.py. Dry-runs unless SNS is configured.
-app.include_router(notify_router)
+# Operator and notification routes are disabled unless explicitly enabled behind an authenticated boundary.
+if _env_enabled("STORMHAVEN_ENABLE_OPERATOR_ROUTES"):
+    app.include_router(console_router)
+    app.include_router(planner_router)
+if _env_enabled("STORMHAVEN_ENABLE_NOTIFY"):
+    app.include_router(notify_router)
 # Onboarding location lookup (GET /api/locate): app/locate.py. Premise ID / geolocation -> neighborhood zoom.
 app.include_router(locate_router)
 
