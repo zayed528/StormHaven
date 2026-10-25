@@ -290,3 +290,29 @@ def plan(storm_id: str, crews: int, crew_size: int, road_access: str = "normal",
             "Replays the damage recorded in ARCOS for this storm; no switching or back-feed.",
         ],
     }
+
+
+@lru_cache(maxsize=1)
+def _storm_percentiles() -> dict[str, float]:
+    """Severity percentile of each recorded storm (same ranking as pipelines/03's severity curve)."""
+    meta = DATA_PROCESSED / "meta.json"
+    sizes = pd.Series(json.loads(meta.read_text()).get("event_sizes", {})) if meta.exists() else pd.Series(dtype=float)
+    return {} if sizes.empty else ((sizes.rank(method="average") - 0.5) / len(sizes) * 100).to_dict()
+
+
+@lru_cache(maxsize=256)
+def customer_context(severity: float, crews: int, crew_size: int, road_access: str = "normal") -> dict | None:
+    """For the CUSTOMER view: the replayable real storm closest to this severity, replayed with the customer's crew
+    scenario (deterministic run only, fast). Returns {label, crews, hours_to_90pct} or None (synthetic network,
+    or a storm milder than any replayable one: no honest comparison to make)."""
+    if not available():
+        return None
+    pct = _storm_percentiles()
+    cands = [s for s in storms() if s["storm_id"] in pct]
+    if not cands or severity < min(pct[s["storm_id"]] for s in cands) - PCFG["context_margin_pct"]:
+        return None
+    ref = min(cands, key=lambda s: abs(pct[s["storm_id"]] - severity))
+    st = _storm(ref["storm_id"])
+    _, curve, _ = _simulate(st, _hours(st, crew_size, road_access, 1.0), crews, CFG["assessment_hours"], record=True)
+    h90 = _time_to(curve, 0.9, st.customers_out)
+    return {"label": ref["label"], "crews": crews, "hours_to_90pct": h90} if h90 else None

@@ -9,6 +9,10 @@ export const STRINGS = {
     locale: "en-US",
     tr: (s) => s,             // backend sentences: already English
     languageAria: "Language",
+    // onboarding stand-in (until Abby's onboarding/Onboarding.jsx lands) + start over / skip links
+    onboardTitle: "Get your storm outlook", onboardIntro: "Enter the premise ID from your bill. Tell us only what you want us to consider; everything is optional.",
+    onboardPremise: "Premise ID (from your bill)", onboardContinue: "Show my outlook", onboardNotFound: "We couldn't find that premise ID. Check your bill and try again.",
+    onboardSkip: "Skip and explore the map", onboardRestart: "Start over",
     themeAria: "Color theme", themeLight: "Light", themeDark: "Dark",
     skipToLookup: "Skip to premise ID lookup",
     viewsAria: "View", tabCustomer: "Customer view", tabConsole: "Utility console",
@@ -103,6 +107,9 @@ export const STRINGS = {
     locale: "es-US",
     tr: toEs,                 // backend sentences -> Spanish (unknown ones stay English)
     languageAria: "Idioma",
+    onboardTitle: "Vea su pronóstico ante la tormenta", onboardIntro: "Ingrese el número de servicio de su factura. Díganos solo lo que quiera que consideremos; todo es opcional.",
+    onboardPremise: "Número de servicio (de su factura)", onboardContinue: "Ver mi pronóstico", onboardNotFound: "No encontramos ese número de servicio. Revise su factura e inténtelo de nuevo.",
+    onboardSkip: "Omitir y explorar el mapa", onboardRestart: "Empezar de nuevo",
     themeAria: "Tema de color", themeLight: "Claro", themeDark: "Oscuro",
     skipToLookup: "Ir a la búsqueda por número de servicio",
     viewsAria: "Vista", tabCustomer: "Vista del cliente", tabConsole: "Consola de la empresa",
