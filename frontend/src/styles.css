@@ -465,3 +465,92 @@ input[type="range"] { accent-color: var(--fill); }
 @media (prefers-reduced-motion: reduce) {
   .storm-thumb, .storm-bar, .storm-toggles button { transition: none; }
 }
+/* Customer view <-> utility console: the whole page slides sideways (App.jsx sets data-vt during the switch).
+   Overrides the "no default animation" rule the theme switch uses, only while data-vt is set. */
+@keyframes vt-out-left { to { transform: translateX(-30%); opacity: 0; } }
+@keyframes vt-in-right { from { transform: translateX(30%); opacity: 0; } }
+@keyframes vt-out-right { to { transform: translateX(30%); opacity: 0; } }
+@keyframes vt-in-left { from { transform: translateX(-30%); opacity: 0; } }
+:root[data-vt="to-console"]::view-transition-old(root) { animation: vt-out-left .45s cubic-bezier(.4, 0, .2, 1) both; }
+:root[data-vt="to-console"]::view-transition-new(root) { animation: vt-in-right .45s cubic-bezier(.4, 0, .2, 1) both; }
+:root[data-vt="to-customer"]::view-transition-old(root) { animation: vt-out-right .45s cubic-bezier(.4, 0, .2, 1) both; }
+:root[data-vt="to-customer"]::view-transition-new(root) { animation: vt-in-left .45s cubic-bezier(.4, 0, .2, 1) both; }
+/* The storm pill sizes to its content and never wraps. With left:50% a fixed box only gets half the screen's width to
+   lay out in, so longer labels (Spanish) wrapped "Storm level" above the toggles. width:max-content fixes that;
+   max-width keeps it on screen (phones scroll the levels sideways instead). */
+.storm-float { width: max-content; }
+.storm-bar { flex-wrap: nowrap; }
+.storm-bar-label { flex: none; }
+@media (max-width: 760px) { .storm-float { width: calc(100vw - 1rem); } }
+/* ---------- ThemedSelect (components/ThemedSelect.jsx): a liquid-glass dropdown with a rounded glass option list ---------- */
+.tsel { position: relative; display: grid; gap: .25rem; font-size: .85rem; color: var(--muted); }
+.tsel-button { display: inline-flex; align-items: center; justify-content: space-between; gap: .6rem; min-width: 11rem;
+  padding: .42rem .8rem .42rem .95rem; border-radius: 999px; border: 1px solid var(--lg-edge); background: var(--lg-bg);
+  color: var(--ink); font: inherit; font-size: .9rem; text-align: left; cursor: pointer;
+  backdrop-filter: blur(14px) saturate(1.6); -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  box-shadow: inset 0 1px 0 var(--lg-shine), inset 0 -1px 0 var(--lg-shade), 0 4px 14px var(--shadow);
+  transition: background-color .25s ease, box-shadow .25s ease, transform .15s ease; }
+.tsel-button:hover, .tsel.open .tsel-button { background: var(--lg-bg-hover); }
+.tsel-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsel-chevron { flex: none; color: var(--muted); transition: transform .25s ease; }
+.tsel.open .tsel-chevron { transform: rotate(180deg); }
+.tsel-list { position: absolute; top: calc(100% + .35rem); left: 0; z-index: 1300; min-width: 100%; max-height: 18rem;
+  overflow-y: auto; margin: 0; padding: .35rem; list-style: none; border-radius: 14px; border: 1px solid var(--lg-edge);
+  background: var(--glass-strong); backdrop-filter: blur(18px) saturate(1.6); -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  box-shadow: inset 0 1px 0 var(--lg-shine), 0 14px 36px var(--shadow); animation: tsel-in .18s ease-out; }
+.tsel-list li { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .45rem .75rem;
+  border-radius: 10px; color: var(--ink); font-size: .9rem; cursor: pointer; white-space: nowrap; }
+.tsel-list li.active { background: var(--tint-info); }
+.tsel-list li.selected { font-weight: 700; }
+.tsel-check { color: var(--accent); }
+@keyframes tsel-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+
+/* ---------- Utility console view: one screen, no page scrolling (console.css lays out the inside) ---------- */
+.app.console-mode { max-width: none; height: 100dvh; box-sizing: border-box; display: flex; flex-direction: column;
+  gap: .75rem; padding: .9rem 1.5rem; overflow: hidden; }
+.app.console-mode > main.view { flex: 1; min-height: 0; display: block; }
+@media (max-width: 900px) { .app.console-mode { height: auto; overflow: visible; } }
+@media (prefers-reduced-motion: reduce) { .tsel-list, .tsel-chevron, .tsel-button { animation: none; transition: none; } }
+/* ============================================================================================================
+   STORM FORECAST BANNER + "WHAT IF...?" (storm strength is an input, not a setting), and the card layout:
+   How long (+ what if) / risk + why / alerts. Appended last.
+   ============================================================================================================ */
+/* the banner reuses the floating glass pill under the header; it informs, it isn't a control */
+.storm-float { max-width: min(980px, calc(100vw - 1.5rem)); }
+.storm-banner { display: flex; align-items: center; gap: .55rem; padding: .5rem 1.1rem; border-radius: 999px;
+  background: var(--lg-bg-hover); border: 1px solid var(--lg-edge); color: var(--ink); font-size: .9rem; line-height: 1.35;
+  backdrop-filter: blur(18px) saturate(1.8); -webkit-backdrop-filter: blur(18px) saturate(1.8);
+  box-shadow: inset 0 1px 0 var(--lg-shine), inset 0 -1px 0 var(--lg-shade), 0 10px 30px var(--shadow); }
+.storm-banner-icon { flex: none; color: var(--accent); }
+.storm-banner-similar { color: var(--muted); }
+.storm-banner-whatif { color: var(--ink); font-weight: 600; }
+@media (max-width: 760px) { .storm-float { width: calc(100vw - 1rem); } .storm-banner { border-radius: 14px; font-size: .8rem; padding: .45rem .8rem; } }
+
+/* cards: How long gets the most room (it holds the timeline); the risk line is the risk card's title row */
+.dock .cols { grid-template-columns: 1.4fr 1.1fr 1.15fr; }
+.dock .card-risk > .band:first-child { margin: 0 0 .6rem; font-size: 1.1rem; font-weight: 700; }
+.dock .card h2 { margin-top: 0; }
+/* "What if...?" box inside the How long card */
+.whatif { margin: .7rem 0 .4rem; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 12px; }
+.whatif h3 { margin: 0 0 .15rem; }
+.whatif > .muted { margin: 0 0 .45rem; font-size: .82rem; }
+.storm-bar.storm-bar-inline { display: inline-flex; padding: .2rem; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.storm-bar-inline .storm-toggles button { padding: .32rem .75rem; font-size: .84rem; }
+.forecast-mark { color: var(--accent); font-weight: 900; }
+.whatif-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+.whatif-chip { padding: .35rem .8rem; font: inherit; font-size: .84rem; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); transition: background-color .2s ease, color .2s ease; }
+.whatif-chip:hover:not([aria-pressed="true"]) { background: var(--tint-info); }
+.whatif-chip[aria-pressed="true"] { background: var(--fill); border-color: var(--fill); color: var(--on-fill); font-weight: 600; }
+.whatif-chip[aria-pressed="true"]::before { content: "✓ "; }
+/* premise-ID panel: centered in the space under the header */
+.onboard-overlay { align-content: safe center; }
+.dock .card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* All three cards share one height and start at the top, so their first lines (How long / the risk line / Alerts)
+   sit level instead of the shorter card hanging lower. */
+.dock .cols { align-items: stretch; }
+
+/* Planner bridge line in the "How long" card: a real-storm comparison (AEP crews + days to restore).
+   An info-tinted callout, so it reads as evidence behind the estimate, not just more body text. */
+.storm-context { margin: .5rem 0 0; padding: .5rem .7rem; font-size: .9rem; border-left: 4px solid var(--accent);
+  background: var(--tint-info); border-radius: 0 6px 6px 0; }

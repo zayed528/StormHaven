@@ -1,11 +1,12 @@
-// The answer for one home, floating over the full-screen map: a safety strip + the three cards the challenge asks for,
-// Demo utility status / Our estimate (model) / What you can do (+ alerts), side by side along the bottom. The cards
-// slide in from the left one after another when a home is chosen (App remounts this per home).   Owner: Nandan
+// The answer for one home, floating over the full-screen map: a safety strip + three cards side by side along the
+// bottom: How long (the restoration range, "What if...?" changes, the timeline, the limits) / the outage risk and
+// why / Alerts. Preparation advice and declared needs are the chat's job. The cards slide in from the left one after
+// another when a home is chosen (App remounts this per home).   Owner: Nandan
 import React, { useEffect, useState } from "react";
 import { sendNotify } from "../api/client.js";
 import { fmtRange } from "../i18n.js";
 import { BAND_COLORS } from "./OutageMap.jsx";
-import { DemoToggle, NeedsPicker } from "./ScenarioControls.jsx";
+import StormToggle from "./ScenarioControls.jsx";
 import StepTimeline from "./StepTimeline.jsx";
 
 // Safety banner color class per risk band (colors match the map dots). Unknown = location not matched.
@@ -33,8 +34,9 @@ function SendButton({ t, messageKey, request, eligible }) {
   );
 }
 
-// controls = { needs, onToggleNeed, enrolled, onEnrolled, utilityConfirmed, onUtilityConfirmed } (state lives in App)
-export default function ResultsPanel({ t, result, changes, notifyRequest, controls, onClose }) {
+// whatIf = { scenario, onScenario, baseCrews, moreCrews } (state lives in App): the "What if...?" controls change the
+// scenario sent to the engines, so every number in the cards (and the map) follows.
+export default function ResultsPanel({ t, result, changes, notifyRequest, whatIf, onClose }) {
   // Esc closes the cards (the map stays; clicking a home opens them again).
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape" && !e.defaultPrevented && !document.querySelector(".chat:not([hidden])")) onClose(); };
@@ -55,32 +57,34 @@ export default function ResultsPanel({ t, result, changes, notifyRequest, contro
 
   // The three cards, built by position i (sets the slide-in stagger). Order: on a phone the estimate comes first,
   // since only one card is visible at a time in the swipeable row.
+  const sc = whatIf.scenario;
+  const roadsBlocked = sc.road_access === "blocked";
+  const moreCrews = sc.crews_available > whatIf.baseCrews;
+  // The three cards, built by position i (sets the slide-in stagger). On a phone the risk card comes first, since only
+  // one card is visible at a time in the swipeable row.
   const cards = {
-        // Card 1: utility status. Only the explicit demo toggle fills it; never represented as a live AEP feed.
-    status: (i) => (
-        <article key="status" className="card" style={{ "--i": i }}><h2>{t.confirmedTitle}</h2>
-          {restoration.outage_confirmed ? (
-            <><p><strong>{t.outageConfirmed}</strong></p>
-              {restoration.confirmed_etr && <p>{restoration.confirmed_etr}</p>}
-              <p className="muted">{t.utilitySource}</p></>
-          ) : <p>{t.noOutage}</p>}
-          <DemoToggle t={t} utilityConfirmed={controls.utilityConfirmed} onUtilityConfirmed={controls.onUtilityConfirmed} />
-        </article>),
-
-        // Card 2: everything the model estimated, labeled as such, with its assumptions and limits.
-    estimate: (i) => (
-        <article key="estimate" className="card" style={{ "--i": i }}><h2>{t.estimateTitle} <span className="tag">{t.modelEstimate}</span></h2>
-          {fallback ? (
-            <p><strong>{t.fallback}</strong> {t.fallbackMore} {risk.trust.could_change_if.map(t.tr).join(" ")}</p>
-          ) : (<>
-            <p key={`b${k}`} className={`band${flash(changes?.band)}`} style={{ borderColor: BAND_COLORS[risk.band] ?? "#888" }}>
-              {t.bandLine(t.bands[risk.band] ?? risk.band, t.conf[risk.trust.confidence] ?? risk.trust.confidence)}
-              {changes?.band && <span className="was"> {t.was} <s>{t.bands[changes.band] ?? changes.band}</s></span>}</p>
-            <h3>{t.why}</h3>
-            <ul>{risk.factors.map((f, i) => <li key={i}>{t.tr(f.plain_language)}</li>)}</ul>
-            <h3>{t.howLong}</h3>
-            <p key={`r${k}`} className={flash(changes?.range).trim()}><strong>{t.tr(restoration.range_text)}</strong>
-              {changes?.range && <span className="was"> {t.was} <s>{fmtRange(changes.range, t)}</s></span>}</p>
+    // Card 1: how long, if you lose power: the range, "What if...?" changes, the drivers, the timeline, the limits.
+    howlong: (i) => (
+        <article key="howlong" className="card card-howlong" style={{ "--i": i }} tabIndex={0}><h2>{t.howLong}</h2>
+          <p key={`r${k}`} className={flash(changes?.range).trim()}><strong>{t.tr(restoration.range_text)}</strong>
+            {changes?.range && <span className="was"> {t.was} <s>{fmtRange(changes.range, t)}</s></span>}</p>
+          {/* The planner bridge: one line connecting this estimate to how a similar REAL storm was restored
+              (AEP crews + days-to-back). Only present for storms close to a real one; backend sentence, so t.tr. */}
+          {!fallback && restoration.storm_context && (
+            <p className="storm-context">{t.tr(restoration.storm_context)}</p>)}
+          {!fallback && (<>
+            {/* What if...? The forecast storm is the starting point; these try a different storm, roads, or crews. */}
+            <div className="whatif" role="group" aria-labelledby="whatif-title">
+              <h3 id="whatif-title">{t.whatIfTitle}</h3>
+              <p className="muted" id="whatif-storm">{t.whatIfStorm}</p>
+              <StormToggle t={t} scenario={sc} onScenario={whatIf.onScenario} labelledBy="whatif-storm" />
+              <div className="whatif-chips">
+                <button type="button" className="whatif-chip" aria-pressed={roadsBlocked}
+                  onClick={() => whatIf.onScenario({ ...sc, road_access: roadsBlocked ? "normal" : "blocked" })}>{t.whatIfRoads}</button>
+                <button type="button" className="whatif-chip" aria-pressed={moreCrews}
+                  onClick={() => whatIf.onScenario({ ...sc, crews_available: moreCrews ? whatIf.baseCrews : whatIf.moreCrews })}>{t.whatIfCrews}</button>
+              </div>
+            </div>
             <ul>{restoration.drivers.map((d, i) => <li key={i}>{t.tr(d.plain_language)}</li>)}</ul>
             <StepTimeline t={t} restoration={restoration} />
           </>)}
@@ -92,14 +96,23 @@ export default function ResultsPanel({ t, result, changes, notifyRequest, contro
           </details>
         </article>),
 
-        // Card 3: what the customer can do (changes with the needs they choose to declare here), plus alerts.
-    todo: (i) => (
-        <article key="todo" className="card" style={{ "--i": i }}><h2>{t.canDo}</h2>
-          <NeedsPicker t={t} needs={controls.needs} onToggleNeed={controls.onToggleNeed}
-            enrolled={controls.enrolled} onEnrolled={controls.onEnrolled} />
-          <ul>{guidance.actions.map((a, i) => (
-            <li key={i}>{a.text}{a.reason && <span className="muted"> ({a.reason})</span>}</li>))}</ul>
-          <h3>{t.alerts}</h3>
+    // Card 2: the outage risk line (its colored bar) at the very top, then why.
+    risk: (i) => (
+        <article key="risk" className="card card-risk" style={{ "--i": i }} aria-label={t.estimateTitle} tabIndex={0}>
+          {fallback ? (
+            <p><strong>{t.fallback}</strong> {t.fallbackMore} {risk.trust.could_change_if.map(t.tr).join(" ")}</p>
+          ) : (<>
+            <h2 key={`b${k}`} className={`band${flash(changes?.band)}`} style={{ borderColor: BAND_COLORS[risk.band] ?? "#888" }}>
+              {t.bandLine(t.bands[risk.band] ?? risk.band, t.conf[risk.trust.confidence] ?? risk.trust.confidence)}
+              {changes?.band && <span className="was"> {t.was} <s>{t.bands[changes.band] ?? changes.band}</s></span>}</h2>
+            <h3>{t.why}</h3>
+            <ul>{risk.factors.map((f, i) => <li key={i}>{t.tr(f.plain_language)}</li>)}</ul>
+          </>)}
+        </article>),
+
+    // Card 3: alerts (eligibility, follow-ups, the messages and "send as a text").
+    alerts: (i) => (
+        <article key="alerts" className="card" style={{ "--i": i }} tabIndex={0}><h2>{t.alerts}</h2>
           <p>{alerts.eligible ? t.eligibleYes : t.eligibleNo}</p>
           <ul className="muted">{alerts.reasons.map((r, i) => <li key={i}>{t.tr(r)}</li>)}</ul>
           {activeEsc.length > 0 && (
@@ -114,7 +127,7 @@ export default function ResultsPanel({ t, result, changes, notifyRequest, contro
           </details>
         </article>),
   };
-  const order = narrow ? ["estimate", "status", "todo"] : ["status", "estimate", "todo"];
+  const order = narrow ? ["risk", "howlong", "alerts"] : ["howlong", "risk", "alerts"];
 
   return (
     // tabIndex -1: App moves focus here after a keyboard lookup, so screen readers start at the answer.

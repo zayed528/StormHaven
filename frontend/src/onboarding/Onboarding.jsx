@@ -3,33 +3,28 @@
 // no shared files. Nandan mounts it in App.jsx as the first screen and feeds the result into existing state.
 //
 // Props:
-//   t          current-language strings (i18n.js). New keys live under t.onboarding; reuses t.needs / t.enrolled.
+//   t          current-language strings (i18n.js). New keys live under t.onboarding.
 //   onComplete({ premise_id, declared_needs, alerts_enrolled, channels, language, center, zoom })
 //
-// One clean screen (phone-first, reads well on camera): premise ID -> opt-in needs -> alerts sign-up.
+// One clean screen (phone-first, reads well on camera): premise ID -> alerts sign-up. Declared needs are not asked
+// here (the chat handles preparation advice), so declared_needs is always [].
 // The ID is validated against GET /api/locate, which also returns the neighborhood center/zoom for the map.
 // There is NO address entry: the only address<->premise link is the customer file, which we never read.
 import React, { useState } from "react";
 import "./onboarding.css";
 
-// Opt-in needs, same schema values + labels as ScenarioControls (DeclaredNeed in schemas.py).
-const NEEDS = ["refrigerated_medication", "mobility", "infants", "pets", "critical_facility"];
-
 export default function Onboarding({ t, onComplete }) {
   const o = t.onboarding;
   const [premiseId, setPremiseId] = useState("");
-  const [needs, setNeeds] = useState([]);
   const [enrolled, setEnrolled] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);         // friendly message when the ID doesn't resolve
   const [locating, setLocating] = useState(false);  // "use my location" in progress
 
-  const toggleNeed = (k) => setNeeds((n) => (n.includes(k) ? n.filter((x) => x !== k) : [...n, k]));
-
   // Shared finish step: given a validated /api/locate result, hand everything back to the app.
   const finish = (loc) => onComplete({
     premise_id: loc.map_point_id ? premiseId.trim() || loc.map_point_id : premiseId.trim(),
-    declared_needs: needs,
+    declared_needs: [],
     alerts_enrolled: enrolled,
     channels: enrolled ? ["sms"] : [],            // sms is the wired demo channel
     language: t.locale?.startsWith("es") ? "es" : "en",
@@ -85,13 +80,6 @@ export default function Onboarding({ t, onComplete }) {
               onChange={(e) => setPremiseId(e.target.value)} placeholder={o.premisePlaceholder} />
             <span className="ob-hint">{o.premiseHint}</span>
           </label>
-
-          <fieldset className="ob-needs">
-            <legend>{o.needsLegend}</legend>
-            {NEEDS.map((k) => (
-              <label key={k} className="check">
-                <input type="checkbox" checked={needs.includes(k)} onChange={() => toggleNeed(k)} />{t.needs[k]}</label>))}
-          </fieldset>
 
           <label className="check ob-enroll">
             <input type="checkbox" checked={enrolled} onChange={() => setEnrolled(!enrolled)} />{o.enroll}</label>

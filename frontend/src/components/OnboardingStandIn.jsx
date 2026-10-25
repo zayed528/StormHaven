@@ -5,11 +5,8 @@
 // null and App zooms to the customer's dot from the concierge answer instead.
 import React, { useState } from "react";
 
-const NEEDS = ["refrigerated_medication", "mobility", "infants", "pets", "critical_facility"];
-
 export default function OnboardingStandIn({ t, onComplete }) {
   const [premiseId, setPremiseId] = useState("");
-  const [needs, setNeeds] = useState([]);
   const [enrolled, setEnrolled] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -29,7 +26,7 @@ export default function OnboardingStandIn({ t, onComplete }) {
       }
     } catch { /* endpoint not reachable: App zooms from the concierge answer instead */ }
     setBusy(false);
-    onComplete({ premise_id: id, declared_needs: needs, alerts_enrolled: enrolled, channels: enrolled ? ["sms"] : [],
+    onComplete({ premise_id: id, declared_needs: [], alerts_enrolled: enrolled, channels: enrolled ? ["sms"] : [],
                  language: t.locale.startsWith("es") ? "es" : "en", ...place });
   };
 
@@ -42,12 +39,6 @@ export default function OnboardingStandIn({ t, onComplete }) {
           inputMode="numeric" autoComplete="off" aria-invalid={notFound} aria-describedby={notFound ? "onboard-error" : undefined} />
       </label>
       {notFound && <p id="onboard-error" className="error" role="alert">{t.onboardNotFound}</p>}
-      <fieldset><legend>{t.needsLegend}</legend>
-        {NEEDS.map((k) => (
-          <label key={k} className="check">
-            <input type="checkbox" checked={needs.includes(k)}
-              onChange={() => setNeeds(needs.includes(k) ? needs.filter((x) => x !== k) : [...needs, k])} />{t.needs[k]}</label>))}
-      </fieldset>
       <label className="check"><input type="checkbox" checked={enrolled} onChange={() => setEnrolled(!enrolled)} />{t.enrolled}</label>
       <button type="submit" className="onboard-go" disabled={!premiseId.trim() || busy}>{busy ? t.sending : t.onboardContinue}</button>
     </form>
