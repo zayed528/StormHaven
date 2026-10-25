@@ -38,13 +38,15 @@ function chartColors() {
 }
 
 // aside = extra content for the top of the right-hand column (the console's popup buttons).
-export default function PlannerPanel({ t = STRINGS.en, aside = null }) {
+// crews / crewSize / roads (+ setters) belong to the Console, so one set of knobs drives the whole console.
+// replay = {stormId, label}: the real storm the customer's answer was compared with; it's selected automatically
+// (by ID when the answer carries one, else by label). typical = milder than any replayable storm: no replay shown.
+export default function PlannerPanel({ t = STRINGS.en, aside = null, replay = { stormId: null, label: null }, typical = false,
+  crews = 20, setCrews = () => {}, crewSize = 3, setCrewSize = () => {}, roads = "normal", setRoads = () => {} }) {
   const c = t.console;
   // --- controls (the knobs an operator turns) ---
   const [stormId, setStormId] = useState(null);
-  const [crews, setCrews] = useState(20);
-  const [crewSize, setCrewSize] = useState(3);          // AEP guide: 2-8 people per crew
-  const [roadAccess, setRoadAccess] = useState("normal");
+  const roadAccess = roads;
   // --- data ---
   const [storms, setStorms] = useState(null);           // null = loading; [] = none / not available
   const [available, setAvailable] = useState(true);     // false on the synthetic network
@@ -61,9 +63,16 @@ export default function PlannerPanel({ t = STRINGS.en, aside = null }) {
     }).catch((e) => setError(e.message));
   }, []);
 
+  // 1b) Follow the customer's storm: select the replay storm the answer was compared with, when we can tell which.
+  useEffect(() => {
+    if (!storms?.length) return;
+    const match = storms.find((x) => (replay.stormId && x.storm_id === replay.stormId) || (replay.label && x.label === replay.label));
+    if (match) setStormId(match.storm_id);
+  }, [replay.stormId, replay.label, storms]);
+
   // 2) Re-plan whenever a control changes. Debounced so dragging a slider doesn't spam the engine.
   useEffect(() => {
-    if (!stormId) return;
+    if (!stormId || typical) return;
     setLoading(true);
     const t = setTimeout(() => {
       const q = `storm_id=${encodeURIComponent(stormId)}&crews=${crews}&crew_size=${crewSize}&road_access=${roadAccess}`;
@@ -73,7 +82,7 @@ export default function PlannerPanel({ t = STRINGS.en, aside = null }) {
         .finally(() => setLoading(false));
     }, 250);
     return () => clearTimeout(t);
-  }, [stormId, crews, crewSize, roadAccess]);
+  }, [stormId, crews, crewSize, roadAccess, typical]);
 
   // Theme colors for the chart (recomputed each render, so flipping light/dark re-themes the curve).
   const ck = chartColors();
@@ -106,15 +115,16 @@ export default function PlannerPanel({ t = STRINGS.en, aside = null }) {
       <header className="console-head planner-head">
         <h3>{c.planTitle}</h3>
         <div className="console-knobs">
-          <ThemedSelect label={c.storm} value={stormId} placeholder={c.loading} onChange={setStormId}
-            options={(storms ?? []).map((s) => ({ value: s.storm_id, label: t.tr(s.label ?? s.storm_id) }))} />
+          {/* No replay storm to pick for a typical storm (milder than any replayable one). */}
+          {!typical && <ThemedSelect label={c.storm} value={stormId} placeholder={c.loading} onChange={setStormId}
+            options={(storms ?? []).map((s) => ({ value: s.storm_id, label: t.tr(s.label ?? s.storm_id) }))} />}
           <label>{c.crews(crews)}
             <input type="range" min="1" max="200" value={crews} onChange={(e) => setCrews(+e.target.value)} />
           </label>
           <label>{c.crewSize(crewSize)}
             <input type="range" min="2" max="8" value={crewSize} onChange={(e) => setCrewSize(+e.target.value)} />
           </label>
-          <ThemedSelect label={c.roadAccess} value={roadAccess} onChange={setRoadAccess}
+          <ThemedSelect label={c.roadAccess} value={roadAccess} onChange={setRoads}
             options={ACCESS.map((a) => ({ value: a, label: c.roads[a] }))} />
         </div>
       </header>
@@ -124,7 +134,7 @@ export default function PlannerPanel({ t = STRINGS.en, aside = null }) {
           on its own if it has to). */}
       <div className={`planner-split${loading ? " loading" : ""}`} aria-busy={loading}>
         <div className="planner-left">
-          {!plan ? <p className="console-muted">{c.loadingPlan}</p> : (<>
+          {typical ? <p className="planner-typical">{c.typicalNoReplay}</p> : !plan ? <p className="console-muted">{c.loadingPlan}</p> : (<>
             {/* Headline numbers: the scale of the storm and how long to full restoration. */}
             <div className="planner-headline">
               <div><span className="big">{plan.customers_out?.toLocaleString(t.locale)}</span><span>{c.customersOut}</span></div>
@@ -156,7 +166,7 @@ export default function PlannerPanel({ t = STRINGS.en, aside = null }) {
 
         <div className="planner-right">
           {aside}
-          {plan && (<>
+          {plan && !typical && (<>
             {/* Crews-needed to hit each target. crews_needed === null => target can't be met. */}
             <div className="planner-targets">
               <h4>{c.crewsNeeded}</h4>

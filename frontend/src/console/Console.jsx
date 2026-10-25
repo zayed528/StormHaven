@@ -4,6 +4,10 @@
 //     import Console from "./console/Console.jsx";
 //     {tab === "console" && <Console />}
 // Text: from t.console in i18n.js (App passes the current language's t); backend phrases go through t.tr.
+// Scenario: ONE-WAY from the customer view (App passes `customer` = {severity, crews, roads, whatIf} and `replay` =
+// {stormId, label} for the real storm the customer's answer was compared with). The storm is shown, not chosen,
+// here; the operator can try other crews / crew size / roads locally, and any change to the customer's scenario
+// resets those back to the customer's values.
 // Data comes from app/console.py (GET /api/console/*). Everything here is a model estimate or a
 // scenario what-if; it is never a confirmed restoration time and shows no premise-level locations.
 import React, { useEffect, useRef, useState } from "react";
@@ -18,18 +22,29 @@ const get = (url) => fetch(url).then((r) => {
   return r.json();
 });
 
-// Same 4 storm levels as the customer view (ScenarioControls.jsx), so both screens talk about the same storm.
-// Labels: t.stormLevels[i].label.
+// Same 4 storm strengths as the customer view (ScenarioControls.jsx). Labels: t.stormLevels[i].label.
 const STORM_LEVELS = [50, 95, 97, 99];
+const levelFor = (pct) => STORM_LEVELS.reduce((best, p, i) =>
+  (Math.abs(p - pct) < Math.abs(STORM_LEVELS[best] - pct) ? i : best), 0);
+const DEFAULT_CREW_SIZE = 3;                      // config restoration.crew_size_persons
 const BAND_ORDER = ["Very High", "High", "Moderate", "Low"];
 
 const BAND_COLOR = { Low: "#2E7D32", Moderate: "#E3B23C", High: "#E8743B", "Very High": "#A4243B", Unknown: "#5B6B7A" };
 
-export default function Console({ t = STRINGS.en }) {
+export default function Console({ t = STRINGS.en, customer = { severity: 97, crews: 20, roads: "normal", whatIf: false },
+  replay = { stormId: null, label: null } }) {
   const c = t.console;
-  const [level, setLevel] = useState(2);           // index into STORM_LEVELS (starts at High risk, like the customer view)
-  const severity = STORM_LEVELS[level];
-  const [crews, setCrews] = useState(20);
+  const severity = customer.severity;               // from the customer view; not changeable here
+  const level = levelFor(severity);
+  const typical = level === 0;                      // milder than any storm the planner can replay
+  // The operator's planning knobs start at the customer's values; one set drives everything in the console.
+  const [crews, setCrews] = useState(customer.crews);
+  const [crewSize, setCrewSize] = useState(DEFAULT_CREW_SIZE);
+  const [roads, setRoads] = useState(customer.roads);
+  const resetToCustomer = () => { setCrews(customer.crews); setCrewSize(DEFAULT_CREW_SIZE); setRoads(customer.roads); };
+  // The customer changed their scenario: start again from it (the operator's tweaks are dropped).
+  useEffect(resetToCustomer, [customer.severity, customer.crews, customer.roads]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const differs = crews !== customer.crews || crewSize !== DEFAULT_CREW_SIZE || roads !== customer.roads;
   const [circuits, setCircuits] = useState(null);
   const [selected, setSelected] = useState(null);
   const [order, setOrder] = useState(null);
@@ -53,10 +68,10 @@ export default function Console({ t = STRINGS.en }) {
   // Alert queue + escalations recompute when the scenario changes (debounced for slider drags).
   useEffect(() => {
     const t = setTimeout(() => {
-      get(`/api/console/alerts?severity=${severity}&crews=${crews}`).then(setAlerts).catch((e) => setError(e.message));
+      get(`/api/console/alerts?severity=${severity}&crews=${crews}&road_access=${roads}`).then(setAlerts).catch((e) => setError(e.message));
     }, 250);
     return () => clearTimeout(t);
-  }, [severity, crews]);
+  }, [severity, crews, roads]);
 
   // Popup: focus moves into it when it opens; Esc closes it and focus goes back to its button.
   useEffect(() => {
@@ -146,21 +161,26 @@ export default function Console({ t = STRINGS.en }) {
     <section className="console console-fit" aria-label={c.aria}>
       <header className="console-head">
         <h2>{c.title}</h2>
-        <div className="console-knobs">
-          <label>{t.stormLevel}: <strong>{t.stormLevels[level].label}</strong>
-            <input type="range" min="0" max={STORM_LEVELS.length - 1} step="1" value={level}
-              onChange={(e) => setLevel(+e.target.value)} aria-valuetext={t.stormLevels[level].label} />
-          </label>
-          <label>{c.crews(crews)}
-            <input type="range" min="1" max="200" value={crews} onChange={(e) => setCrews(+e.target.value)} />
-          </label>
+        {/* The scenario comes from the customer view (read-only here), plus a note when the operator is testing
+            different crews / crew size / roads, with a way back. */}
+        <div className="console-scenario" role="status">
+          {/* The storm type is the point of this chip: big, bold, with its color dot; where it came from is small. */}
+          <span className="console-scenario-chip">
+            <span className="chip-label">{c.scenarioFromLabel}</span>
+            <span className={`chip-storm lvl-${level}`}>{t.stormLevels[level].label}</span>
+            <span className={`chip-src${customer.whatIf ? " is-whatif" : ""}`}>{customer.whatIf ? c.sourceWhatIf : c.sourceForecast}</span>
+          </span>
+          {differs && (
+            <span className="console-muted">{c.customerAssumes(customer.crews, c.roads[customer.roads])}{" "}
+              <button type="button" className="link-button" onClick={resetToCustomer}>{c.resetToCustomer}</button></span>)}
         </div>
       </header>
 
       {error && <p className="console-error" role="alert">{c.apiError(error)}</p>}
 
       {/* Storm restoration plan: replay a real storm, size the crews, see the restoration curve. */}
-      <PlannerPanel t={t} aside={popupButtons} />
+      <PlannerPanel t={t} aside={popupButtons} replay={replay} typical={typical}
+        crews={crews} setCrews={setCrews} crewSize={crewSize} setCrewSize={setCrewSize} roads={roads} setRoads={setRoads} />
 
       {/* Popup: slides in from the right over the console; click outside, x, or Esc closes it. */}
       {panel && (<>

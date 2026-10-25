@@ -200,19 +200,14 @@ input[type="range"] { accent-color: var(--fill); }
   .console-grid { grid-template-columns: 1fr; }
   .console-audit { display: block; overflow-x: auto; }   /* wide table scrolls inside its card, not the page */
 }
-/* map view switch (risk dots / heatmap), over the map's top-right corner */
+/* heat legend, over the map's top-right corner */
 .map { position: relative; }
 .map-tools { position: absolute; top: .5rem; right: .5rem; z-index: 5; display: grid; justify-items: end; gap: .35rem; }
-.map-mode { display: inline-flex; border: 1px solid var(--ink); border-radius: 6px; overflow: hidden; background: var(--surface);
-  box-shadow: 0 1px 4px var(--shadow); }
-.map-mode button { padding: .35rem .75rem; font: inherit; font-size: .85rem; border: none; background: var(--surface); color: var(--ink); cursor: pointer; }
-.map-mode button + button { border-left: 1px solid var(--ink); }
-.map-mode button[aria-pressed="true"] { background: var(--fill); color: var(--on-fill); font-weight: 600; }
 .heat-legend { display: flex; align-items: center; gap: .4rem; margin: 0; padding: .3rem .55rem; font-size: .78rem;
   background: var(--overlay); border-radius: 4px; color: var(--ink); }
 .heat-ramp { width: 64px; height: 10px; border-radius: 2px;
   background: linear-gradient(90deg, rgba(76,159,112,.45), #E3B23C, #D9682B, #A4243B); }
-@media (max-width: 600px) { .map-mode button { min-height: 40px; } .heat-legend { font-size: .72rem; } }
+@media (max-width: 600px) { .heat-legend { font-size: .72rem; } }
 /* Light/Dark switch: floating pill in the bottom-left corner (the chat robot sits bottom-right). The active mode is filled. */
 .theme-switch { position: fixed; left: 1.25rem; bottom: 1.25rem; z-index: 1000; display: flex; flex-direction: column;
   padding: 4px; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px;

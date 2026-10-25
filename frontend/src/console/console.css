@@ -168,3 +168,22 @@
   .planner-right { overflow: visible; }
 }
 @media (prefers-reduced-motion: reduce) { .console-drawer, .console-backdrop { animation: none; } }
+/* Scenario linked from the customer view (read-only chip) + the operator's "testing other values" note. */
+.console-scenario { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; font-size: .88rem; }
+.console-scenario-chip { padding: .35rem .85rem; border-radius: 999px; font-weight: 600; color: var(--ink);
+  background: var(--lg-bg-hover); border: 1px solid var(--lg-edge);
+  box-shadow: inset 0 1px 0 var(--lg-shine), 0 4px 14px var(--shadow); }
+.console .console-scenario .link-button { padding: 0; border: none; background: none; box-shadow: none; color: var(--accent);
+  text-decoration: underline; border-radius: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.planner-typical { margin: 1rem 0; padding: 1rem 1.1rem; border-radius: 12px; border: 1px dashed var(--line); color: var(--muted); font-size: .95rem; }
+/* Scenario chip: the storm type stands out (larger, bold, its color dot); the source label and tag stay small. */
+.console-scenario-chip { display: inline-flex; align-items: center; gap: .6rem; padding: .4rem .5rem .4rem 1rem; }
+.chip-label { font-size: .78rem; font-weight: 500; color: var(--muted); }
+.chip-storm { display: inline-flex; align-items: center; gap: .45rem; font-size: 1.08rem; font-weight: 800; color: var(--ink); }
+.chip-storm::before { content: ""; width: .75rem; height: .75rem; border-radius: 50%; background: #4C9F70;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent); }
+.chip-storm.lvl-1::before { background: #E3B23C; } .chip-storm.lvl-2::before { background: #D9682B; }
+.chip-storm.lvl-3::before { background: #A4243B; }
+.chip-src { padding: 0 .45rem; line-height: 1.35; border-radius: 999px; font-size: .66rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--muted); border: 1px solid var(--line); background: var(--surface); }
+.chip-src.is-whatif { color: var(--on-fill); background: var(--fill); border-color: var(--fill); }

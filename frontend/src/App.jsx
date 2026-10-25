@@ -19,6 +19,17 @@ const ONBOARDING = import.meta.glob("./onboarding/Onboarding.jsx", { eager: true
 const Onboarding = ONBOARDING["./onboarding/Onboarding.jsx"]?.default ?? OnboardingStandIn;
 // "What if...? 50% more crews": the same comparison the engine's own driver line makes (int(20 x 1.5) + 1).
 const BASE_CREWS = 20, MORE_CREWS = 31;
+
+// Which real storm the customer's answer was compared with (the planner replay behind the "In our replay of the
+// ... storm" sentence). The console replays the same storm. TEMPORARY: the answer doesn't name the storm by ID yet,
+// so the label is read from the backend's English sentence. When the answer carries restoration.replay_storm_id
+// (Akshat + Jaid), stormId is used and the label parsing is no longer needed.
+function replayFrom(result) {
+  const r = result?.restoration;
+  if (!r) return { stormId: null, label: null };
+  const m = /In our replay of the (.+? storm) with \d+ crews/.exec(r.storm_context ?? "");
+  return { stormId: r.replay_storm_id ?? null, label: m ? m[1] : null };
+}
 const NEIGHBORHOOD_ZOOM = 14;   // map zoom for "your neighborhood" (same as /api/locate's hint)
 
 // Theme: the visitor's saved choice, else their computer's setting. index.html applies the same rule before the
@@ -311,7 +322,11 @@ export default function App() {
         <ChatPanel t={t} premiseId={premise} scenario={scenario} profile={profile} utilityStatus={utilityStatus} />
       </div>
 
-      {view === "console" && <main className="view"><Console t={t} /></main>}
+      {/* One-way link: the console plans against the customer view's scenario (storm, crews, roads) and the same
+          real storm the answer was compared with. Nothing in the console changes the customer view. */}
+      {view === "console" && <main className="view"><Console t={t} replay={replayFrom(result)}
+        customer={{ severity: scenario.severity_percentile, crews: scenario.crews_available, roads: scenario.road_access,
+                    whatIf: scenario.severity_percentile !== FORECAST_PCT }} /></main>}
     </div>
   );
 }

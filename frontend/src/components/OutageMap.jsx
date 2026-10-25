@@ -1,7 +1,7 @@
 // Interactive Plotly map (owner: Abby UI, Jaid layers). No API key: "scattermap" traces render with MapLibre
 // and the free "carto-positron" (light theme) / "carto-darkmatter" (dark theme) basemaps.
-// Two views (toggle in the map's top-right corner): risk dots, or risk dots over a heatmap of where homes are
-// likely to lose power. The dots stay visible and clickable in both, so you always see where the homes are.
+// One view: risk dots over a heatmap of where homes are likely to lose power. The dots stay visible and clickable,
+// so you always see where the homes are.
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import createPlotlyComponent from "react-plotly.js/factory";
 import Plotly from "plotly.js-dist-min";
@@ -18,12 +18,11 @@ export const BAND_COLORS = { Low: "#4C9F70", Moderate: "#E3B23C", High: "#D9682B
 // within the radius, so at the zoomed-out starting view many dots overlap: the scale is set for that view.
 // Transparent at 0 so the basemap shows through.
 const HEAT_MAX = 14;
-// Colors that change with the theme: lines, the outline under each dot, the selected-home ring, the legend box.
-// On the dark map the dot outline turns light, so dots (the dark-red ones especially) still stand out.
+// Colors that change with the theme: lines, the selected-home ring, the legend box.
 const MAP_THEME = {
-  light: { style: "carto-positron", line: "#5B6B7A", faintLine: "rgba(91,107,122,0.25)", halo: "#14213D",
+  light: { style: "carto-positron", faintLine: "rgba(91,107,122,0.25)",
            ring: "#14213D", legendBg: "rgba(255,255,255,0.85)", text: "#14213D", paper: "#FFFFFF" },
-  dark: { style: "carto-darkmatter", line: "#7D8EA3", faintLine: "rgba(163,177,194,0.22)", halo: "#DCE4EE",
+  dark: { style: "carto-darkmatter", faintLine: "rgba(163,177,194,0.22)",
           ring: "#FFFFFF", legendBg: "rgba(23,33,49,0.88)", text: "#E6EDF5", paper: "#0F1623" },
 };
 // Map center that puts `focus` offsetPx above the middle of the screen. Web-map scale: ~78,272 m per pixel at zoom 0
@@ -41,8 +40,6 @@ const HEAT_COLORS = [[0, "rgba(76,159,112,0)"], [0.08, "rgba(76,159,112,0.45)"],
 // topInset = px covered by the app's header at the top of the map (the legend goes just below the map tools).
 export default function OutageMap({ t, dark = false, layers, focus = null, topInset = 0, selectedId, onSelect }) {
   const c = dark ? MAP_THEME.dark : MAP_THEME.light;
-  const [mode, setMode] = useState("dots");        // "dots" | "heat"
-  const heat = mode === "heat";
   // Zooming to the customer's home is an animated camera flight on the underlying MapLibre map, not a layout change:
   // changing Plotly's layout redraws every layer and then jumps, which looked laggy.
   const gd = useRef(null);                         // Plotly graph div
@@ -64,21 +61,15 @@ export default function OutageMap({ t, dark = false, layers, focus = null, topIn
     //    storm-level change, long enough to hide the "what changed" highlight.
     const lines = [{
       type: "scattermap", mode: "lines", lat: lineCoords.lat, lon: lineCoords.lon,
-      // Heatmap view: thin and faint, or the dense line network paints the town dark over the heat.
-      line: heat ? { width: 1, color: c.faintLine } : { width: 2, color: c.line },
+      // Thin and faint, or the dense line network paints the town dark over the heat.
+      line: { width: 1, color: c.faintLine },
       hoverinfo: "skip", showlegend: false,
     }];
-    // Heatmap view: a glowing surface of homes likely to lose power (drawn under the dots, never clickable).
-    const heatLayer = heat ? [{
+    // 2a) Heatmap: a glowing surface of homes likely to lose power (drawn under the dots, never clickable).
+    const heatLayer = [{
       type: "densitymap", lat: layers.premises.map((p) => p.lat), lon: layers.premises.map((p) => p.lon),
       z: layers.premises.map((p) => p.p * p.n), radius: 14, zmin: 0, zmax: HEAT_MAX,
       colorscale: HEAT_COLORS, showscale: false, hoverinfo: "skip",
-    }] : [];
-    // 2a) Dark halo under every dot: scattermap markers have no outline option, and the yellow/green dots alone
-    //     are too faint against the light basemap (needs 3:1 contrast). Drawn first, so it sits underneath.
-    const halo = heat ? [] : [{                    // dots view only; over the heatmap the dots go without it
-      type: "scattermap", mode: "markers", lat: layers.premises.map((p) => p.lat), lon: layers.premises.map((p) => p.lon),
-      marker: { size: 10, color: c.halo }, hoverinfo: "skip", showlegend: false,
     }];
     // 2b) Premises: one trace per band so the legend explains the colors
     const byBand = Object.keys(BAND_COLORS).map((band) => {
@@ -90,8 +81,8 @@ export default function OutageMap({ t, dark = false, layers, focus = null, topIn
         // Each point is one transformer; n = homes it serves (no home-level locations are sent).
         text: pts.map((p) => t.mapHover(t.bands[band], p.n)),
         hovertemplate: "%{text}<extra></extra>",
-        // Heatmap view: smaller and without the dark halo, so the heat still shows between the homes.
-        marker: { size: heat ? 4 : 7, color: BAND_COLORS[band] },
+        // Small, so the heat still shows between the homes.
+        marker: { size: 4, color: BAND_COLORS[band] },
       };
     });
     // 3) The customer's home: a glowing target drawn UNDER its dot (a soft outer glow + a solid disc; the colored
@@ -101,8 +92,8 @@ export default function OutageMap({ t, dark = false, layers, focus = null, topIn
       type: "scattermap", mode: "markers", lat: [sel.lat], lon: [sel.lon], hoverinfo: "skip", showlegend: false,
       marker: { size, color: c.ring, opacity: i === 0 ? 0.3 : 1 },
     })) : [];
-    return [...lines, ...heatLayer, ...halo, ...target, ...byBand];
-  }, [layers, lineCoords, selectedId, t, heat, c]);
+    return [...lines, ...heatLayer, ...target, ...byBand];
+  }, [layers, lineCoords, selectedId, t, c]);
 
   // Fit the view to the data: center on the middle of the points' bounding box, zoom so it all fits.
   // (Synthetic demo network ~0.1 degrees wide -> zoom ~11; AEP service area ~0.6 degrees -> zoom ~8.)
@@ -158,9 +149,9 @@ export default function OutageMap({ t, dark = false, layers, focus = null, topIn
         map: { style: c.style, ...(camera.current ?? { center: view.center, zoom: view.zoom }) },
         paper_bgcolor: c.paper,
         margin: { l: 0, r: 0, t: 0, b: 0 },
-        // Top-right, under the header and the Risk dots / Heatmap switch (and the heat legend when it shows).
+        // Top-right, under the header and the heat legend.
         legend: { x: 0.99, xanchor: "right", yanchor: "top",
-          y: topInset ? Math.max(0.3, 1 - (topInset + (heat ? 92 : 58)) / window.innerHeight) : 0.99, bgcolor: c.legendBg, font: { color: c.text }, title: { text: t.mapLegend, font: { color: c.text } } },
+          y: topInset ? Math.max(0.3, 1 - (topInset + 52) / window.innerHeight) : 0.99, bgcolor: c.legendBg, font: { color: c.text }, title: { text: t.mapLegend, font: { color: c.text } } },
         // Keep the camera (user pans and fly-tos) across data updates.
         uirevision: "overview",
       }}
@@ -171,13 +162,9 @@ export default function OutageMap({ t, dark = false, layers, focus = null, topIn
       onInitialized={(_, div) => { gd.current = div; setReady(true); }}
       onUpdate={(_, div) => { gd.current = div; }}
     />
-    {/* View switch, over the map's top-right corner. Visual only: the answer and its text don't change. */}
+    {/* Heat color key, over the map's top-right corner. */}
     <div className="map-tools">
-      <div className="map-mode" role="group" aria-label={t.mapView}>
-        <button type="button" aria-pressed={!heat} onClick={() => setMode("dots")}>{t.mapDots}</button>
-        <button type="button" aria-pressed={heat} onClick={() => setMode("heat")}>{t.mapHeat}</button>
-      </div>
-      {heat && <p className="heat-legend"><span className="heat-ramp" aria-hidden="true" />{t.heatLegend}</p>}
+      <p className="heat-legend"><span className="heat-ramp" aria-hidden="true" />{t.heatLegend}</p>
     </div>
   </>);
 }
