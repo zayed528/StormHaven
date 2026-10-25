@@ -83,6 +83,15 @@ An honest fallback: no numbers, "we can't make a reliable prediction for this lo
 **How do you separate estimates from facts?**
 Three columns: *Confirmed by AEP* (only from the utility's status feed, simulated in the demo) / *Our estimate* (labeled as a model estimate, with confidence, assumptions and limits) / *What you can do*.
 
+**Can I look up someone else's house?**
+You can see a neighborhood's outlook, which is infrastructure information, like a utility's public outage map. Map dots are anonymous neighborhood tokens, never premise numbers or homes. Personal features (alerts, texts, declared needs) only follow when you enter your own premise ID. In production, premise lookup would sit behind AEP account login; we say that openly.
+
+**Why does the public website show a different (demo) network?**
+The internet-facing deployment runs in a fail-closed demo mode on a synthetic network, so no AEP data is ever exposed publicly. The real-data version runs privately (the video and live demo use it). That's privacy by design, not a gap.
+
+**Why does the customer pick the storm strength?**
+They don't. The banner shows the forecast scenario ("planning for a severe storm, similar to Sep 2024"). "What if…?" lets them see how much a stronger storm, blocked roads or extra crews would change their answer. The engines learn *where* damage happens from AEP history; *how strong* the storm is comes from the forecast.
+
 ## Known simplifications (say them before they're found)
 These are listed in `docs/ASSUMPTIONS.md` → "Known simplifications":
 - damage treated as independent across devices

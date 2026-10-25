@@ -188,6 +188,7 @@ def test_match_endpoint_validates_severity():
     assert client.get("/api/planner/match", params={"severity": 150}).status_code == 422
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")      # reloading main re-runs its startup-hook setup
 def test_match_endpoint_is_on_even_without_operator_routes(monkeypatch):
     """The banner needs /api/planner/match on the public server, where operator routes are switched off."""
     import importlib
