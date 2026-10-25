@@ -501,3 +501,41 @@ input[type="range"] { accent-color: var(--fill); }
 .app.console-mode > main.view { flex: 1; min-height: 0; display: block; }
 @media (max-width: 900px) { .app.console-mode { height: auto; overflow: visible; } }
 @media (prefers-reduced-motion: reduce) { .tsel-list, .tsel-chevron, .tsel-button { animation: none; transition: none; } }
+/* ============================================================================================================
+   STORM FORECAST BANNER + "WHAT IF...?" (storm strength is an input, not a setting), and the card layout:
+   How long (+ what if) / risk + why / alerts. Appended last.
+   ============================================================================================================ */
+/* the banner reuses the floating glass pill under the header; it informs, it isn't a control */
+.storm-float { max-width: min(980px, calc(100vw - 1.5rem)); }
+.storm-banner { display: flex; align-items: center; gap: .55rem; padding: .5rem 1.1rem; border-radius: 999px;
+  background: var(--lg-bg-hover); border: 1px solid var(--lg-edge); color: var(--ink); font-size: .9rem; line-height: 1.35;
+  backdrop-filter: blur(18px) saturate(1.8); -webkit-backdrop-filter: blur(18px) saturate(1.8);
+  box-shadow: inset 0 1px 0 var(--lg-shine), inset 0 -1px 0 var(--lg-shade), 0 10px 30px var(--shadow); }
+.storm-banner-icon { flex: none; color: var(--accent); }
+.storm-banner-similar { color: var(--muted); }
+.storm-banner-whatif { color: var(--ink); font-weight: 600; }
+@media (max-width: 760px) { .storm-float { width: calc(100vw - 1rem); } .storm-banner { border-radius: 14px; font-size: .8rem; padding: .45rem .8rem; } }
+
+/* cards: How long gets the most room (it holds the timeline); the risk line is the risk card's title row */
+.dock .cols { grid-template-columns: 1.4fr 1.1fr 1.15fr; }
+.dock .card-risk > .band:first-child { margin: 0 0 .6rem; font-size: 1.1rem; font-weight: 700; }
+.dock .card h2 { margin-top: 0; }
+/* "What if...?" box inside the How long card */
+.whatif { margin: .7rem 0 .4rem; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 12px; }
+.whatif h3 { margin: 0 0 .15rem; }
+.whatif > .muted { margin: 0 0 .45rem; font-size: .82rem; }
+.storm-bar.storm-bar-inline { display: inline-flex; padding: .2rem; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.storm-bar-inline .storm-toggles button { padding: .32rem .75rem; font-size: .84rem; }
+.forecast-mark { color: var(--accent); font-weight: 900; }
+.whatif-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+.whatif-chip { padding: .35rem .8rem; font: inherit; font-size: .84rem; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); transition: background-color .2s ease, color .2s ease; }
+.whatif-chip:hover:not([aria-pressed="true"]) { background: var(--tint-info); }
+.whatif-chip[aria-pressed="true"] { background: var(--fill); border-color: var(--fill); color: var(--on-fill); font-weight: 600; }
+.whatif-chip[aria-pressed="true"]::before { content: "✓ "; }
+/* premise-ID panel: centered in the space under the header */
+.onboard-overlay { align-content: safe center; }
+.dock .card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* All three cards share one height and start at the top, so their first lines (How long / the risk line / Alerts)
+   sit level instead of the shorter card hanging lower. */
+.dock .cols { align-items: stretch; }

@@ -127,6 +127,9 @@ const RULES = [
   // planner storm names: "Feb 2025 storm"
   [/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4}) storm$/, (m, y) => `Tormenta de ${{ Jan: "ene.", Feb: "feb.", Mar: "mar.",
     Apr: "abr.", May: "mayo", Jun: "jun.", Jul: "jul.", Aug: "ago.", Sep: "sept.", Oct: "oct.", Nov: "nov.", Dec: "dic." }[m]} ${y}`],
+  // weather reference storm labels: "Sep 2024"
+  [/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4})$/, (m, y) => `${{ Jan: "ene.", Feb: "feb.", Mar: "mar.",
+    Apr: "abr.", May: "mayo", Jun: "jun.", Jul: "jul.", Aug: "ago.", Sep: "sept.", Oct: "oct.", Nov: "nov.", Dec: "dic." }[m]} ${y}`],
   // alerts.py eligibility reasons
   [/^Outage risk is (.+?) — meets the pre-storm alert threshold\.$/,
     (b) => `El riesgo de apagón es ${BAND[b] ?? b}: cumple el umbral para recibir alertas antes de la tormenta.`],

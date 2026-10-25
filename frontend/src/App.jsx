@@ -5,18 +5,20 @@
 import React, { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import OutageMap from "./components/OutageMap.jsx";
-import ScenarioControls from "./components/ScenarioControls.jsx";
+import { FORECAST_PCT, StormBanner } from "./components/ScenarioControls.jsx";
 import ResultsPanel from "./components/ResultsPanel.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
 import Console from "./console/Console.jsx";          // Abby's utility console (fetches its own data)
 import OnboardingStandIn from "./components/OnboardingStandIn.jsx";
-import { getConcierge, getHealth, getMap } from "./api/client.js";
+import { getConcierge, getHealth, getMap, getWeather } from "./api/client.js";
 import { STRINGS, fmtRange } from "./i18n.js";
 
 // Onboarding (first screen): Abby's onboarding/Onboarding.jsx as soon as that file exists, else the stand-in.
 // import.meta.glob finds nothing (instead of failing the build) while her file isn't merged yet.
 const ONBOARDING = import.meta.glob("./onboarding/Onboarding.jsx", { eager: true });
 const Onboarding = ONBOARDING["./onboarding/Onboarding.jsx"]?.default ?? OnboardingStandIn;
+// "What if...? 50% more crews": the same comparison the engine's own driver line makes (int(20 x 1.5) + 1).
+const BASE_CREWS = 20, MORE_CREWS = 31;
 const NEIGHBORHOOD_ZOOM = 14;   // map zoom for "your neighborhood" (same as /api/locate's hint)
 
 // Theme: the visitor's saved choice, else their computer's setting. index.html applies the same rule before the
@@ -45,8 +47,11 @@ const MoonIcon = () => (
 export default function App() {
   const [layers, setLayers] = useState(null);
   const [health, setHealth] = useState(null);
+  const [weather, setWeather] = useState(null);       // reference storms: "similar to the Sep 2024 storm..."
   const [premise, setPremise] = useState(null);
-  const [scenario, setScenario] = useState({ severity_percentile: 97, crews_available: 20, road_access: "normal", extra_damage: [] });
+  // Starts at the forecast storm (demo: fixed; production: AEP's storm forecast), 20 crews, normal roads. The
+  // "What if...?" controls in the answer change it from there.
+  const [scenario, setScenario] = useState({ severity_percentile: FORECAST_PCT, crews_available: BASE_CREWS, road_access: "normal", extra_damage: [] });
   const [needs, setNeeds] = useState([]);
   const [enrolled, setEnrolled] = useState(true);
   const [utilityConfirmed, setUtilityConfirmed] = useState(false);
@@ -60,7 +65,7 @@ export default function App() {
   const [focus, setFocus] = useState(null);            // {lat, lon, zoom, offsetPx, key}: zoom to the customer's area
   const [dockOpen, setDockOpen] = useState(true);      // the answer cards (closed with x / Esc; a new home reopens them)
   const headerRef = useRef(null);
-  const stormRef = useRef(null);                     // the floating storm toggles under the header
+  const stormRef = useRef(null);                     // the storm banner floating under the header
   const [chromeH, setChromeH] = useState(0);         // px covered at the top: header + storm toggles (the map draws under)
   const t = STRINGS[lang];
   // The last answer shown for THIS location: its range + the scenario behind it. Sent back so the
@@ -117,6 +122,8 @@ export default function App() {
 
   // Once on load: find out whether we're on synthetic data (shows the banner).
   useEffect(() => { getHealth().then(setHealth).catch(() => {}); }, []);
+  // Weather reference storms describe the forecast storm in the banner. Optional: failures are ignored.
+  useEffect(() => { getWeather().then(setWeather).catch(() => {}); }, []);
 
   // Language switch: tell screen readers / the browser, and forget the last answer. range_short is localized
   // ("6-24 hours" vs "6-24 horas"), so comparing across languages would fake an "estimate updated" message.
@@ -270,8 +277,9 @@ export default function App() {
 
       {/* Storm level: a liquid-glass pill floating centered just under the header (customer view only). */}
       {view === "customer" && (
-        <div className="storm-float" ref={stormRef} role="region" aria-label={t.stormLevel}>
-          <ScenarioControls t={t} scenario={scenario} onScenario={setScenario} />
+        <div className="storm-float" ref={stormRef} role="region" aria-label={t.stormForecastAria}>
+          <StormBanner t={t} scenario={scenario} referenceStorms={weather?.reference_storms ?? []}
+            onReset={() => setScenario({ ...scenario, severity_percentile: FORECAST_PCT })} />
         </div>)}
 
       {/* Customer view stays mounted while the console is open, so the map, selection and chat survive the trip. */}
@@ -296,7 +304,7 @@ export default function App() {
 
         {/* key = the home: a new home remounts the cards, so they slide in again; storm changes just update them. */}
         {showDock && <ResultsPanel key={premise} t={t} result={result} changes={changes} onClose={() => setDockOpen(false)}
-          controls={{ needs, onToggleNeed: toggleNeed, enrolled, onEnrolled: setEnrolled, utilityConfirmed, onUtilityConfirmed: setUtilityConfirmed }}
+          whatIf={{ scenario, onScenario: setScenario, baseCrews: BASE_CREWS, moreCrews: MORE_CREWS }}
           notifyRequest={{ premise_id: premise, scenario, profile,
                            previous_range_text: shownPrev.current.range, previous_scenario: shownPrev.current.scenario }} />}
 
