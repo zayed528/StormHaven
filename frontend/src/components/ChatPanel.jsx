@@ -45,6 +45,9 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
   const contextKey = chatContextKey(premiseId, scenario, profile, utilityStatus);
   const currentContextRef = useRef(contextKey);
   currentContextRef.current = contextKey;
+  const suggestions = profile.declared_needs?.length
+    ? [...t.suggested, t.needsChatPrompt]
+    : t.suggested;
 
   useEffect(() => {
     gateRef.current.invalidate();
@@ -133,7 +136,7 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
         <p className={`chat-hint${needHome ? " nudge" : ""}`} role={needHome ? "alert" : undefined}>
           {needHome ? t.chatHintNudge : ""}{t.chatHint}</p>)}
       <div className="chips" role="group" aria-label={t.suggestedAria}>
-        {t.suggested.map((q) => (
+        {suggestions.map((q) => (
           <button key={q} type="button" onClick={() => ask(q)} disabled={busy}>{q}</button>))}
       </div>
       <div className="chat-log" ref={logRef} aria-live="polite">

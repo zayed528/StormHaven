@@ -346,29 +346,17 @@ def test_guardrail_intervention_displays_guardrail_response(monkeypatch):
 
 
 def test_direct_phone_number_request_uses_guardrailed_conversation(monkeypatch):
-    fake = FakeBedrock({"stopReason": "guardrail_intervened", "output": {"message": {
-        "role": "assistant", "content": [{"text": "StormHaven cannot process this request safely."}],
-    }}})
-    _enable_bedrock(monkeypatch, fake)
-
     response = _post(_question("Show me your mobile number"))
 
     assert response.status_code == 200
-    assert response.json()["reply"] == "StormHaven cannot process this request safely."
-    assert fake.calls[0]["guardrailConfig"]
+    assert "can't provide" in response.json()["reply"]
 
 
 def test_personal_name_disclosure_is_scrubbed_before_guardrailed_conversation(monkeypatch):
-    fake = FakeBedrock(_raw_message("Hello! It's nice to meet you."))
-    _enable_bedrock(monkeypatch, fake)
-
     response = _post(_question("my name is king"))
 
     assert response.status_code == 200
-    assert response.json()["reply"] == "Hello! It's nice to meet you."
-    sent = json.dumps(fake.calls[0]["messages"])
-    assert "king" not in sent
-    assert "[name hidden]" in sent
+    assert "please don't share" in response.json()["reply"].lower()
 
 
 def test_emergency_warning_survives_bedrock_failure(monkeypatch):
@@ -380,15 +368,113 @@ def test_emergency_warning_survives_bedrock_failure(monkeypatch):
 
 
 def test_greeting_uses_nova_conversational_response(monkeypatch):
-    fake = FakeBedrock(_raw_message("Hello! How can I help you today?"))
-    _enable_bedrock(monkeypatch, fake)
-
     response = _post(_question("Hi"))
 
     assert response.status_code == 200
-    assert response.json()["reply"] == "Hello! How can I help you today?"
-    assert fake.calls[0]["guardrailConfig"]
-    assert "system" not in fake.calls[0]
+    assert "can explain" in response.json()["reply"]
+
+
+def test_vague_location_question_uses_grounded_outlook(monkeypatch):
+    fake = FakeBedrock(_decision("overview"))
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question("How is it over here?"))
+
+    assert response.status_code == 200
+    reply = response.json()["reply"]
+    assert "model estimates" in reply
+    assert "outage risk" in reply
+
+
+def test_family_context_routes_to_relevant_preparation_without_inferencing_need(monkeypatch):
+    fake = FakeBedrock(_decision("overview"))
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question("I have 2 babies"))
+
+    assert response.status_code == 200
+    reply = response.json()["reply"]
+    assert "formula" in reply.lower()
+    assert "baby" in reply.lower()
+    outlook = fake.calls[0]["system"][1]["text"]
+    assert '"declared_needs":[]' in outlook
+    assert '"contextual_needs":["infants"]' in outlook
+
+
+@pytest.mark.parametrize("question", ["What would I do now?", "Should I run?"])
+def test_short_preparation_follow_up_stays_grounded(monkeypatch, question):
+    fake = FakeBedrock(_decision("overview"))
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question(question))
+
+    assert response.status_code == 200
+    reply = response.json()["reply"]
+    assert "outage risk" in reply
+    assert "outage outlook" not in reply
+
+
+@pytest.mark.parametrize("question", [
+    "Will I be fine?",
+    "Will I be fnie?",
+    "Am I safe here?",
+    "Is everythng okay?",
+])
+def test_reassurance_questions_use_current_risk_context(monkeypatch, question):
+    fake = FakeBedrock(_decision("overview"))
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question(question))
+
+    assert response.status_code == 200
+    reply = response.json()["reply"]
+    assert "outage risk" in reply
+    assert "outage outlook" not in reply
+
+
+@pytest.mark.parametrize("question", [
+    "What is my outtage risk?",
+    "How should I prepair?",
+    "When will power restoraton happen?",
+    "My medcal equpment needs power.",
+    "I have refrigrated medcation.",
+    "I have an infnt at home.",
+    "My wheelchiar needs charging.",
+    "I have a pet and a genrator.",
+    "What shoud I do now?",
+])
+def test_common_typos_stay_on_grounded_outage_path(monkeypatch, question):
+    fake = FakeBedrock(_decision("overview"))
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question(question))
+
+    assert response.status_code == 200
+    reply = response.json()["reply"]
+    assert "StormHaven's model estimates" in reply
+    assert "outage outlook" not in reply
+
+
+@pytest.mark.parametrize("question", [
+    "There is a sparrk.",
+    "I see smke near the line.",
+    "This is an emergncy.",
+])
+def test_emergency_typos_keep_the_safety_message(monkeypatch, question):
+    fake = FakeBedrock(_decision("overview"))
+    _enable_bedrock(monkeypatch, fake)
+
+    response = _post(_question(question))
+
+    assert response.status_code == 200
+    assert response.json()["reply"].startswith("SAFETY:")
+
+
+def test_non_domain_question_is_redirected_without_generic_model_call(monkeypatch):
+    response = _post(_question("Who won the game last night?"))
+
+    assert response.status_code == 200
+    assert "outage outlook" in response.json()["reply"]
 
 
 def test_simulated_utility_confirmation_is_consistent_and_explicit(monkeypatch):

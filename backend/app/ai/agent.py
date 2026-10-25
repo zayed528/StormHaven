@@ -8,19 +8,26 @@ import json
 import logging
 import os
 import re
+from difflib import SequenceMatcher
 
 from app.ai.bedrock_client import get_client, guardrail_config
 from app.ai.prompts import SAFETY_911, SYSTEM_PROMPT
 from app.core.data_loader import get_store
 from app.core.privacy import llm_payload, sanitize_chat_history, scrub_text
 from app.schemas import (ConciergeRequest, CustomerProfile, SimulatedUtilityStatus,
-                         StormScenario)
+                         DeclaredNeed, StormScenario)
 from app.service import run_concierge
 
 logger = logging.getLogger(__name__)
 _TOOL_NAME = "get_outage_outlook"
 _ALLOWED_TOOL_ARGS = {"severity_percentile", "crews_available", "road_access"}
 _ANSWER_TYPES = {"overview", "risk", "restoration", "why", "preparation", "alerts"}
+_CONVERSATIONAL_SYSTEM = """You are StormHaven's customer assistant.
+Stay focused on outage risk, restoration estimates, storm preparation, alerts, and safe utility information.
+If the message is unrelated, insulting, or unclear, respond briefly and politely invite the customer to ask
+about one of those topics. Do not provide medical, legal, mental-health, or emergency advice beyond the fixed
+StormHaven safety response. Never ask for or repeat names, addresses, phone numbers, account numbers, or medical
+details. Do not invent outage facts, restoration times, utility confirmations, or alert eligibility."""
 
 # The ONE tool the LLM can call. It may only change the scenario knobs below; location and profile
 # come from the request, so the model can't look up someone else's premise.
@@ -47,10 +54,17 @@ def _is_emergency(history: list[dict]) -> bool:
     """True if the customer's LATEST message looks like an emergency (downed line, fire, medical...)."""
     last_user = next((m for m in reversed(history) if m.get("role") == "user"), None)
     text = " ".join(c.get("text", "") for c in (last_user or {}).get("content", []) if isinstance(c, dict))
-    return bool(_EMERGENCY.search(text))
+    if _EMERGENCY.search(text):
+        return True
+    lower = text.lower()
+    return _contains_intent_term(lower, ("spark", "smoke", "shock", "emergency")) or any(
+        len(word) >= 4 and SequenceMatcher(None, word, "fire").ratio() >= 0.78
+        for word in re.findall(r"[a-z]+", lower)
+    )
 
 
-def _flatten_for_llm(resp, profile: CustomerProfile, data_mode: str) -> dict:
+def _flatten_for_llm(resp, profile: CustomerProfile, data_mode: str,
+                     contextual_needs: set[str] | None = None) -> dict:
     """Derived, allowlisted fields only. No IDs, no coordinates."""
     d = {
         "risk_source": resp.risk.source,
@@ -69,6 +83,7 @@ def _flatten_for_llm(resp, profile: CustomerProfile, data_mode: str) -> dict:
         "assumptions": resp.risk.trust.assumptions + resp.restoration.trust.assumptions,
         "missing_data": resp.risk.trust.missing_data,
         "declared_needs": [n.value for n in profile.declared_needs],
+        "contextual_needs": sorted(contextual_needs or set()),
         "guidance": [g.text for g in resp.guidance.safety + resp.guidance.actions],   # curated library text
     }
     return llm_payload(d)
@@ -81,19 +96,32 @@ def chat(history: list[dict], premise_id: str | None, circuit_id: str | None,
     The 911 message is prepended in code, not by the LLM, so it appears even if Bedrock is down or misbehaves."""
     emergency = _is_emergency(history)
     safe_history = sanitize_chat_history(history)
+    if _requests_private_contact(history):
+        return _privacy_refusal(profile.language)
+    if _contains_personal_disclosure(history):
+        return _privacy_notice(profile.language)
+    if not emergency:
+        if (small_talk := _small_talk_reply(history, profile.language)):
+            return small_talk
+    # This is a location-based outage concierge, not a general-purpose chatbot.
+    # Keep vague location questions on the grounded path, but redirect unrelated
+    # requests instead of spending a model call outside the MVP.
     if not emergency and not _is_outage_question(history):
-        try:
-            return _conversational_answer(safe_history, profile.language)
-        except Exception as exc:
-            logger.warning("Bedrock conversation fell back safely (%s)", type(exc).__name__)
-            return _conversation_fallback(profile.language)
+        return _out_of_scope_reply(profile.language)
+    question = _latest_question(history)
+    contextual_needs = _contextual_needs(question, profile)
+    effective_profile = CustomerProfile.model_validate({
+        **profile.model_dump(),
+        "declared_needs": list({*profile.declared_needs,
+                                *(DeclaredNeed(need) for need in contextual_needs)})
+    })
     current = run_concierge(ConciergeRequest(premise_id=premise_id, circuit_id=circuit_id,
-                                             scenario=base_scenario, profile=profile,
+                                             scenario=base_scenario, profile=effective_profile,
                                              utility_status=utility_status))
     data_mode = "synthetic" if get_store().is_synthetic else "real"
-    current_payload = _flatten_for_llm(current, profile, data_mode)
+    current_payload = _flatten_for_llm(current, profile, data_mode, contextual_needs)
     try:
-        reply = _answer(safe_history, premise_id, circuit_id, base_scenario, profile,
+        reply = _answer(safe_history, premise_id, circuit_id, base_scenario, effective_profile,
                         utility_status, current, current_payload, data_mode)
     except Exception as exc:  # Bedrock, malformed output, and validation failures all fail closed.
         logger.warning("Bedrock chat fell back safely (%s)", type(exc).__name__)
@@ -108,9 +136,80 @@ def _is_outage_question(history: list[dict]) -> bool:
                     if isinstance(c, dict)).lower()
     terms = ("outage", "power", "electric", "risk", "restor", "crew", "storm", "road", "damage",
              "prepare", "alert", "utility", "line", "wire", "transformer", "fuse", "recloser",
-             "medical", "medication", "mobility", "infant", "baby", "pet", "critical facility",
-             "life support")
-    return any(term in text for term in terms)
+             "medical", "medication", "refrigerated", "refrigeration", "equipment", "device",
+             "mobility", "wheelchair", "oxygen", "insulin", "infant", "baby", "babies",
+             "child", "children", "kid", "kids", "formula", "diaper", "pet", "pets",
+             "critical facility", "facility", "hospital", "senior", "elderly", "generator",
+             "cooler", "freezer",
+             "life support", "here", "over here", "around here", "this area", "my area",
+             "near me", "nearby", "location", "situation", "happening", "baby", "babies",
+             "family", "reveal", "private",
+             "contact", "system prompt", "ignore the system")
+    if _contains_intent_term(text, terms):
+        return True
+    # Short follow-ups in the chat are still about the displayed outage outlook.
+    # Keep these grounded instead of treating them as unrelated general-chat prompts.
+    preparation_phrases = (
+        "what would i do", "what should i do", "what can i do", "what do i do",
+        "what do i need", "should i", "do i need to", "how do i prepare",
+        "what now", "do now",
+    )
+    reassurance_phrases = (
+        "will i be fine", "will i be okay", "will i be safe", "am i safe",
+        "is it safe", "is everything okay", "is everything fine", "can i stay",
+    )
+    return (any(_matches_phrase(text, phrase) for phrase in preparation_phrases) or
+            any(_matches_phrase(text, phrase) for phrase in reassurance_phrases))
+
+
+def _latest_question(history: list[dict]) -> str:
+    last_user = next((m for m in reversed(history) if m.get("role") == "user"), None)
+    return " ".join(c.get("text", "") for c in (last_user or {}).get("content", [])
+                    if isinstance(c, dict))
+
+
+def _contextual_needs(question: str, profile: CustomerProfile) -> set[str]:
+    """Use needs stated in the current message for this reply, without changing the saved profile."""
+    lower = question.lower()
+    candidates = {
+        "medical_device": ("medical", "equipment", "device", "oxygen", "cpap", "ventilator"),
+        "refrigerated_medication": ("refrigerated", "refrigeration", "insulin", "medication", "medicine"),
+        "mobility": ("mobility", "wheelchair", "walker", "elevator", "powered door"),
+        "infants": ("infant", "baby", "babies", "child", "children", "kid", "kids", "formula", "diaper"),
+        "pets": ("pet", "pets", "dog", "cat", "animal"),
+        "critical_facility": ("critical facility", "hospital", "care home", "nursing home", "facility"),
+    }
+    declared = {getattr(need, "value", need) for need in profile.declared_needs}
+    return {need for need, terms in candidates.items()
+            if need not in declared and _contains_intent_term(lower, terms)}
+
+
+def _contains_intent_term(text: str, terms: tuple[str, ...]) -> bool:
+    """Accept small spelling mistakes without turning the router into general chat."""
+    if any(term in text for term in terms):
+        return True
+    words = re.findall(r"[a-z]+", text)
+    single_terms = [term for term in terms if " " not in term and len(term) >= 5]
+    return any(
+        len(word) >= 4 and
+        max(SequenceMatcher(None, word, term).ratio() for term in single_terms) >= 0.78
+        for word in words
+    )
+
+
+def _matches_phrase(text: str, phrase: str) -> bool:
+    """Match a short conversational phrase while allowing one typo per long word."""
+    text_words = re.findall(r"[a-z]+", text)
+    phrase_words = phrase.split()
+    if len(text_words) < len(phrase_words):
+        return False
+    for start in range(len(text_words) - len(phrase_words) + 1):
+        window = text_words[start:start + len(phrase_words)]
+        if all(word == expected or (
+                len(expected) >= 4 and SequenceMatcher(None, word, expected).ratio() >= 0.72
+        ) for word, expected in zip(window, phrase_words)):
+            return True
+    return False
 
 
 def _conversational_answer(history: list[dict], language: str) -> str:
@@ -120,6 +219,7 @@ def _conversational_answer(history: list[dict], language: str) -> str:
         return _conversation_fallback(language)
     kwargs = {
         "modelId": os.environ["BEDROCK_MODEL_ID"],
+        "system": [{"text": _CONVERSATIONAL_SYSTEM}],
         "messages": history,
         "inferenceConfig": {"maxTokens": 300, "temperature": 0.2},
     }
@@ -140,6 +240,14 @@ def _conversation_fallback(language: str) -> str:
     if language == "es":
         return "Puedo ayudar con el riesgo de apagón, la restauración, la preparación y las alertas."
     return "I can help with outage risk, restoration, preparation, and alerts."
+
+
+def _out_of_scope_reply(language: str) -> str:
+    if language == "es":
+        return ("Puedo ayudar con el pronóstico de apagones de esta zona: riesgo, restauración, preparación y "
+                "alertas. Pregúnteme sobre uno de esos temas.")
+    return ("I can help with this area's outage outlook: risk, restoration, preparation, and alerts. "
+            "Please ask me about one of those topics.")
 
 
 def _small_talk_reply(history: list[dict], language: str) -> str | None:
@@ -240,7 +348,8 @@ def _answer(history, premise_id, circuit_id, base_scenario, profile, utility_sta
             # challenge question. Keep obvious UI intents deterministic; the model still routes
             # ambiguous questions and requests validated what-if calculations.
             answer_type = _explicit_answer_type(history[-1]["content"][0]["text"]) or answer_type
-            return _render_response(selected, data_mode, answer_type, what_if=(selected is not current))
+            return _render_response(selected, data_mode, answer_type, what_if=(selected is not current),
+                                    profile=profile, question=history[-1]["content"][0]["text"])
         # Exactly one approved what-if is allowed. Multiple calls or another round fail closed.
         tool_blocks = [c["toolUse"] for c in msg["content"]
                        if isinstance(c, dict) and "toolUse" in c]
@@ -339,20 +448,31 @@ def _parse_answer_type(text: str) -> str:
 def _explicit_answer_type(question: str) -> str | None:
     """Route only unmistakable challenge-question wording; leave ambiguous text to Nova."""
     lower = question.lower()
-    if any(word in lower for word in ("alert", "eligible", "qualify")):
+    if _contains_intent_term(lower, ("alert", "eligible", "qualify")):
         return "alerts"
-    if any(phrase in lower for phrase in ("how long", "restoration", "restore", "power return")):
+    if any(phrase in lower for phrase in ("how long", "power return")) or _contains_intent_term(
+            lower, ("restoration", "restore")):
         return "restoration"
-    if any(word in lower for word in ("prepare", "preparation")) or "what should i do" in lower:
+    if _contains_intent_term(lower, ("prepare", "preparation")) or _matches_phrase(
+            lower, "what should i do"):
+        return "preparation"
+    if _contains_intent_term(lower, ("baby", "babies", "infant", "child", "children", "medical",
+                                     "medication", "refrigerated", "equipment", "device",
+                                     "mobility", "wheelchair", "oxygen", "insulin", "formula",
+                                     "diaper", "pet", "pets", "critical", "facility", "generator")):
         return "preparation"
     if "why" in lower:
         return "why"
-    if any(phrase in lower for phrase in ("lose power", "outage risk", "risk level")):
+    if (any(phrase in lower for phrase in
+            ("lose power", "outage risk", "risk level", "will i be fine", "will i be okay",
+             "will i be safe", "am i safe", "is it safe", "everything okay", "everything fine")) or
+            _contains_intent_term(lower, ("outage", "power", "risk"))):
         return "risk"
     return None
 
 
-def _render_response(r, data_mode: str, answer_type: str = "overview", what_if: bool = False) -> str:
+def _render_response(r, data_mode: str, answer_type: str = "overview", what_if: bool = False,
+                     profile: CustomerProfile | None = None, question: str = "") -> str:
     """Render customer facts only from the typed deterministic engine response."""
     if r.risk.source == "fallback":
         return ("I couldn't match your location to our network data, so StormHaven did not make an outage "

@@ -159,6 +159,7 @@ privacy:
     - eligible
     - assumptions
     - missing_data
+    - contextual_needs
     - guidance            # curated library text only
 
 planner:                   # storm restoration planner (backend/app/engines/planner.py)
