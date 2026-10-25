@@ -160,13 +160,16 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
     // Hardcoded (team request): asking about a street address ("Nans Lane") -> Jed explains we never look homes up by
     // address and asks for the Premise ID. Works before a home is chosen, since that's when people try an address.
     if (/\bnan'?s\s+(lane|ln)\b/i.test(question)) { cannedReply(question, t.addressPrivacyReply); return; }
-    if (!premiseId) { setNeedHome(true); return; }
-    // Hardcoded (team request): "PS5" while the home's risk is Moderate or worse -> Jed says not now, and why, using
-    // the engine's own risk and outage length (no AI call). Low risk: the question goes to Jed as usual.
-    if (/\bps\s?5\b/i.test(question) && risk && RISKY_BANDS.has(risk.band)) {
-      cannedReply(question, t.ps5Reply(t.bands[risk.band].toLowerCase(), Math.round(risk.probability * 100), risk.range));
+    // Hardcoded (team request): any message mentioning "PS5" -> Jed says it's unlikely they can play during the storm
+    // (no AI call). With a Moderate-or-worse home it gives the engine's own risk and outage length as the reason;
+    // otherwise (Low risk, or no home chosen yet) the same answer without numbers, so it never contradicts the risk.
+    if (/ps\s?5/i.test(question)) {
+      cannedReply(question, premiseId && risk && RISKY_BANDS.has(risk.band)
+        ? t.ps5Reply(t.bands[risk.band].toLowerCase(), Math.round(risk.probability * 100), risk.range)
+        : t.ps5ReplyGeneral);
       return;
     }
+    if (!premiseId) { setNeedHome(true); return; }
     if (preparationQuestion(question) && !profile.declared_needs?.length) {
       setSelectedPreparationNeeds([]);
       setPreparationNeeds(question);
