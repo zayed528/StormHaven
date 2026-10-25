@@ -46,8 +46,10 @@ def test_use_my_location_snaps_to_nearest_neighborhood():
 
 
 def test_location_out_of_area_is_refused():
-    # Columbus OH, far from the Roanoke VA service area.
-    r = client.get("/api/locate?lat=40.0&lon=-83.0").json()
+    # A point far from WHATEVER network is loaded (real Roanoke or the synthetic Columbus demo), so this
+    # passes on either: take a located transformer and jump ~10 degrees away (~1000 km), well past the snap cap.
+    _, lat, lon = _a_premise_and_coords()
+    r = client.get(f"/api/locate?lat={lat + 10}&lon={lon + 10}").json()
     assert r["valid"] is False and "service area" in r["reason"].lower()
 
 

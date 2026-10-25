@@ -14,6 +14,7 @@ load_dotenv()      # read .env BEFORE importing app modules, so Bedrock/SNS sett
 from app.ai.agent import chat                                   # noqa: E402
 from app.console import router as console_router              # noqa: E402
 from app.notify.router import router as notify_router         # noqa: E402  (Abby: POST /api/notify)
+from app.locate import router as locate_router               # noqa: E402  (Abby: GET /api/locate)
 from app.core.data_loader import get_store                      # noqa: E402
 from app.map_layers import map_layers                           # noqa: E402
 from app.planner_routes import router as planner_router        # noqa: E402
@@ -32,6 +33,8 @@ app.include_router(console_router)
 app.include_router(planner_router)
 # Proactive-alert sender (POST /api/notify): app/notify/router.py. Dry-runs unless SNS is configured.
 app.include_router(notify_router)
+# Onboarding location lookup (GET /api/locate): app/locate.py. Premise ID / geolocation -> neighborhood zoom.
+app.include_router(locate_router)
 
 
 @app.get("/api/health")
