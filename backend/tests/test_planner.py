@@ -98,3 +98,48 @@ def test_screen_range_matches_sms_range():
         screen = re.findall(r"\d+", r.restoration.range_text.split("(")[0])
         sms = re.findall(r"\d+", r.restoration.range_short)
         assert screen == sms and r.restoration.range_short in r.alerts.messages["pre_storm"]
+
+
+@real
+def test_customer_range_agrees_with_storm_replay(planner_real):
+    """The customer's P50 for homes that lost power in the biggest storm is close to the replay's 50%-restored time
+    (the customer engine's queue curve is calibrated on the replay)."""
+    import numpy as np
+    from app.engines import restoration
+    from app.engines.risk import assess_risk
+    store = planner_real.get_store()
+    restoration._QUEUE_CACHE.clear(); restoration._PRIORITY_CACHE.clear()
+    storm = planner_real.storms()[0]["storm_id"]
+    curve = planner_real.plan(storm, 20, 3)["restore_curve"]
+    half = next(c["hour"] for c in curve if c["pct_restored"] >= 50)
+    meta = json.loads((DATA_PROCESSED / "meta.json").read_text())
+    sizes = pd.Series(meta["event_sizes"])
+    sev = float((sizes.rank()[storm] - 0.5) / len(sizes) * 100)
+    labels = pd.read_csv(DATA_PROCESSED / "premise_event_labels.csv", dtype=str)
+    homes = labels[labels.event_id == storm].premise_id.sample(150, random_state=3)
+    p50 = []
+    for pid in homes:
+        sc = StormScenario(severity_percentile=sev, crews_available=20)
+        risk, pr = assess_risk(store, pid, None, sc)
+        p50.append(restoration.estimate_restoration(store, pr, sc, risk.trust.confidence).p50_hours)
+    restoration._QUEUE_CACHE.clear(); restoration._PRIORITY_CACHE.clear()
+    assert 0.6 * half <= float(np.median(p50)) <= 1.4 * half
+
+
+def test_storm_context_absent_on_synthetic_network():
+    from app.core.data_loader import get_store
+    from app.engines.restoration import storm_context
+    assert storm_context(get_store(), StormScenario(severity_percentile=99)) is None
+
+
+@real
+def test_storm_context_sentence_moves_with_crews(planner_real):
+    from app.engines.restoration import storm_context
+    store = planner_real.get_store()
+    planner_real.customer_context.cache_clear()
+    few = storm_context(store, StormScenario(severity_percentile=99, crews_available=20))
+    many = storm_context(store, StormScenario(severity_percentile=99, crews_available=60))
+    mild = storm_context(store, StormScenario(severity_percentile=50))
+    planner_real.customer_context.cache_clear()
+    assert few and many and few != many and "9 in 10" in few and "replay" in few
+    assert mild is None

@@ -53,8 +53,18 @@ restoration:
   access_multipliers: {normal: 1.0, limited: 1.4, blocked: 2.2}
   # Storm-wide backlog of labor hours per crew at 50th percentile severity. source: assumed
   base_backlog_hours_per_crew: 10.0
+  # Crews working THIS service area (~118k customers) in a storm: 20 crews x 3 = 60 line workers before mutual
+  # aid; "What if AEP brings in extra crews?" covers mutual aid. AEP mentors unavailable to confirm. source: assumed
   default_crews: 20
   critical_facility_priority_bonus: 5000   # customers-equivalent. source: assumed
+  # Real data: the share of storm work done before crews reach a device is LEARNED from replaying the largest
+  # real storms in the planner (by the device's priority percentile), so the customer's range agrees with the
+  # storm replay. Synthetic network: 1 - priority percentile. source: fit on AEP storm replays
+  queue_calibration:
+    storms: 3                  # largest storms replayed (Feb 2025, Sep 2024, Jan 2025)
+    crews: 20                  # replay crew count used for the calibration (the curve is a work SHARE, so the
+                               #   customer's own crew scenario still scales the wait)
+    bin_edges: [0.0, 0.5, 0.7, 0.8, 0.9, 0.95, 0.98, 0.99, 0.995, 1.0]
   unknown_damage_type_hours: 4.0           # person-hours if a damage type has no labor entry. source: assumed
 
   # Repair recipe per damage type: which compatible units (CUs) a crew replaces or installs.
@@ -169,3 +179,4 @@ planner:                   # storm restoration planner (backend/app/engines/plan
   max_crews: 2000          # search cap for "crews needed". source: assumed
   top_jobs: 10             # first repairs listed in the plan
   seed: 7
+  context_margin_pct: 5    # customer sentence only if the scenario is at most this far below a replayable storm
