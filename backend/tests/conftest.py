@@ -5,6 +5,9 @@ import os
 
 os.environ.setdefault("STORMHAVEN_DATA", "synthetic")
 os.environ.setdefault("STORMHAVEN_OFFLINE", "1")        # no live weather calls from tests
+os.environ.setdefault("STORMHAVEN_ENABLE_OPERATOR_ROUTES", "true")
+os.environ.setdefault("STORMHAVEN_ENABLE_NOTIFY", "true")
+os.environ.setdefault("STORMHAVEN_CORS_ORIGINS", "http://localhost:5173")
 
 import shutil
 import tempfile
