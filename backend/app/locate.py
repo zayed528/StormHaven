@@ -36,12 +36,18 @@ def _transformer_of(store, premise_id: str) -> Optional[str]:
 
 
 def _coords(store, node_id: str):
-    """(lat, lon) for a node, or None if it has no coordinate (some breakers/step transformers don't)."""
-    d = store.graph.nodes[node_id]
+    """(lat, lon) for a node, or None if it has no coordinate (some breakers/step transformers don't).
+    Privacy: a transformer serving < 3 homes can pinpoint one house, so its map center is coarsened to
+    ~100 m (3 decimals); 3+ homes keep ~11 m (4 decimals). Matches the blur in map_layers.py so the zoom
+    target never lands more precisely than the dot on the map."""
+    g = store.graph
+    d = g.nodes[node_id]
     lat, lon = d.get("lat"), d.get("lon")
     if lat is None or lon is None or lat != lat or lon != lon:   # None or NaN
         return None
-    return float(lat), float(lon)
+    n_homes = sum(1 for c in g.successors(node_id) if g.nodes[c]["kind"] == "premise")
+    decimals = 3 if n_homes < 3 else 4
+    return round(float(lat), decimals), round(float(lon), decimals)
 
 
 def _fallback(reason: str) -> dict:

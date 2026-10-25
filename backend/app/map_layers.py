@@ -62,21 +62,31 @@ def _points() -> tuple[list[dict], np.ndarray]:
     for n, d in g.nodes(data=True):
         if d["kind"] != "transformer" or d.get("lat") != d.get("lat"):   # NaN coords -> can't draw
             continue
-        rep = map_point_for(store, n)
-        if rep is None:
+        token = map_point_for(store, n)        # anonymous dot id (not a premise number); None if no homes
+        if token is None:
             continue
         n_homes = sum(1 for c in g.successors(n) if g.nodes[c]["kind"] == "premise")
-        path = upline_path(store, rep)
+        # Hazard is computed from the TRANSFORMER's upline path (its own path to the substation). The path
+        # doesn't depend on which home we pick, so we walk up from the transformer directly.
+        path = [n] + upline_path(store, n)
         base = np.clip([_base_prob(g.nodes[x]) for x in path], 0, 0.999)
         hazard.append(float(-np.log1p(-base).sum()))
-        pts.append({"id": rep, "lat": round(d["lat"], 4), "lon": round(d["lon"], 4),
-                    "circuit_id": d["circuit_id"], "n": n_homes})
+        # Privacy: a dot serving < 3 homes can pinpoint one house, so coarsen its coordinates to ~100 m
+        # (3 decimals ≈ 110 m). Dots serving 3+ homes keep ~11 m (4 decimals).
+        decimals = 3 if n_homes < 3 else 4
+        # circuit_id is kept here for INTERNAL callers (the operator console groups dots by circuit); it is
+        # stripped from the public /api/map payload in map_layers() below, so customers never receive it.
+        pts.append({"id": token, "lat": round(d["lat"], decimals), "lon": round(d["lon"], decimals),
+                    "n": n_homes, "circuit_id": d["circuit_id"]})
     return pts, np.array(hazard)
 
 
 def map_layers(severity: float) -> dict:
-    """Transformer points colored by risk at this severity, plus circuit lines. Called on every slider move."""
+    """Transformer points colored by risk at this severity, plus circuit lines. Called on every slider move.
+    PUBLIC/customer-facing: each dot carries only an anonymous token + blurred coords + home count + risk.
+    circuit_id (internal-only) is dropped here even though _points() keeps it for the console."""
     pts, hazard = _points()
     p = 1 - np.exp(-severity_multiplier(severity, get_store()) * hazard)
-    premises = [{**pt, "p": round(float(pi), 3), "band": band_for(float(pi))} for pt, pi in zip(pts, p)]
+    premises = [{"id": pt["id"], "lat": pt["lat"], "lon": pt["lon"], "n": pt["n"],
+                 "p": round(float(pi), 3), "band": band_for(float(pi))} for pt, pi in zip(pts, p)]
     return {"circuits": [{"circuit_id": k, **v} for k, v in _lines().items()], "premises": premises}
