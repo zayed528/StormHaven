@@ -18,12 +18,12 @@ export const BAND_COLORS = { Low: "#4C9F70", Moderate: "#E3B23C", High: "#D9682B
 // within the radius, so at the zoomed-out starting view many dots overlap: the scale is set for that view.
 // Transparent at 0 so the basemap shows through.
 const HEAT_MAX = 14;
-// Colors that change with the theme: lines, the selected-home ring, the legend box.
+// Colors that change with the theme: lines, the selected-home ring, the paper behind the map.
 const MAP_THEME = {
   light: { style: "carto-positron", faintLine: "rgba(91,107,122,0.25)",
-           ring: "#14213D", legendBg: "rgba(255,255,255,0.85)", text: "#14213D", paper: "#FFFFFF" },
+           ring: "#14213D", paper: "#FFFFFF" },
   dark: { style: "carto-darkmatter", faintLine: "rgba(163,177,194,0.22)",
-          ring: "#FFFFFF", legendBg: "rgba(23,33,49,0.88)", text: "#E6EDF5", paper: "#0F1623" },
+          ring: "#FFFFFF", paper: "#0F1623" },
 };
 // Map center that puts `focus` offsetPx above the middle of the screen. Web-map scale: ~78,272 m per pixel at zoom 0
 // (512-px tiles), halving with each zoom level and shrinking with latitude; 111,320 m per degree of latitude.
@@ -37,8 +37,8 @@ const HEAT_COLORS = [[0, "rgba(76,159,112,0)"], [0.08, "rgba(76,159,112,0.45)"],
 // Props: layers = GET /api/map response, selectedId = chosen premise, onSelect(id) = click handler, t = UI text (i18n.js),
 // focus = {lat, lon, zoom, offsetPx, key} to zoom to the customer's neighborhood (null = whole territory); offsetPx
 // shows the home that many pixels above the middle of the screen, in the gap between the header and the answer cards.
-// topInset = px covered by the app's header at the top of the map (the legend goes just below the map tools).
-export default function OutageMap({ t, dark = false, layers, focus = null, topInset = 0, selectedId, onSelect }) {
+// legend = false: no legends on the map (the phone app shows them in its own side panel instead).
+export default function OutageMap({ t, dark = false, layers, focus = null, selectedId, onSelect, legend = true }) {
   const c = dark ? MAP_THEME.dark : MAP_THEME.light;
   // Zooming to the customer's home is an animated camera flight on the underlying MapLibre map, not a layout change:
   // changing Plotly's layout redraws every layer and then jumps, which looked laggy.
@@ -149,9 +149,9 @@ export default function OutageMap({ t, dark = false, layers, focus = null, topIn
         map: { style: c.style, ...(camera.current ?? { center: view.center, zoom: view.zoom }) },
         paper_bgcolor: c.paper,
         margin: { l: 0, r: 0, t: 0, b: 0 },
-        // Top-right, under the header and the heat legend.
-        legend: { x: 0.99, xanchor: "right", yanchor: "top",
-          y: topInset ? Math.max(0.3, 1 - (topInset + 52) / window.innerHeight) : 0.99, bgcolor: c.legendBg, font: { color: c.text }, title: { text: t.mapLegend, font: { color: c.text } } },
+        // No Plotly legend: it drops a band whenever no dot has that band (a Typical storm showed only "Low"), so the
+        // legend below is plain HTML that always lists all four.
+        showlegend: false,
         // Keep the camera (user pans and fly-tos) across data updates.
         uirevision: "overview",
       }}
@@ -162,9 +162,14 @@ export default function OutageMap({ t, dark = false, layers, focus = null, topIn
       onInitialized={(_, div) => { gd.current = div; setReady(true); }}
       onUpdate={(_, div) => { gd.current = div; }}
     />
-    {/* Heat color key, over the map's top-right corner. */}
-    <div className="map-tools">
+    {/* Heat color key + the four risk colors, over the map's top-right corner (always all four, whatever the storm). */}
+    {legend && <div className="map-tools">
       <p className="heat-legend"><span className="heat-ramp" aria-hidden="true" />{t.heatLegend}</p>
-    </div>
+      <div className="band-legend">
+        <p>{t.mapLegend}</p>
+        <ul>{Object.entries(BAND_COLORS).map(([band, color]) => (
+          <li key={band}><span className="band-dot" style={{ background: color }} aria-hidden="true" />{t.bands[band]}</li>))}</ul>
+      </div>
+    </div>}
   </>);
 }

@@ -5,8 +5,8 @@
 //  - Page loads: network first, cached shell if offline (the app then shows its "can't reach the service" message).
 //  - Built assets (hashed file names) and icons: cache first; a new build has new names, so nothing goes stale.
 //  - Map tiles and other sites: not touched (third-party, large, and their own caching rules apply).
-const CACHE = "stormhaven-v1";
-const SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png"];
+const CACHE = "stormhaven-v2";
+const SHELL = ["/", "/app.html", "/manifest.webmanifest", "/app.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -25,9 +25,11 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
   if (req.mode === "navigate") {
+    // Two shells: the phone app (/app.html) and the web app (every other page).
+    const shell = url.pathname === "/app.html" ? "/app.html" : "/";
     e.respondWith(fetch(req)
-      .then((res) => { caches.open(CACHE).then((c) => c.put("/", res.clone())); return res; })
-      .catch(() => caches.match("/")));
+      .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(shell, copy)); return res; })
+      .catch(() => caches.match(shell)));
     return;
   }
   e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((res) => {

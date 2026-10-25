@@ -30,7 +30,8 @@ const RobotIcon = () => (
   </svg>
 );
 
-export default function ChatPanel({ t, premiseId, scenario, profile, utilityStatus }) {
+// onNeeds(needs): tell the app about needs ticked here, so the answer cards, alerts and texts use them too.
+export default function ChatPanel({ t, premiseId, scenario, profile, utilityStatus, onNeeds = () => {} }) {
   const [history, setHistory] = useState([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -44,7 +45,8 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
   const inputRef = useRef(null);
   const launcherRef = useRef(null);
   const gateRef = useRef(createRequestGate());
-  const contextKey = chatContextKey(premiseId, scenario, profile, utilityStatus);
+  // Declared needs are left out: ticking them here updates the app's profile, and that must not wipe this conversation.
+  const contextKey = chatContextKey(premiseId, scenario, { ...profile, declared_needs: undefined }, utilityStatus);
   const currentContextRef = useRef(contextKey);
   currentContextRef.current = contextKey;
   const suggestions = profile.declared_needs?.length
@@ -72,6 +74,19 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
     return () => cancelAnimationFrame(frame);
   }, [history, busy, error, open]);
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
+  // Phone app: the chat is a full-screen sheet sized to the VISIBLE part of the screen, so the on-screen keyboard
+  // never covers the text box (iPhones shrink only the visual viewport when the keyboard opens). src/app/app.css
+  // reads --chat-top / --chat-h; the web app ignores them.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!open || !vv) return undefined;
+    const root = document.documentElement.style;
+    const fit = () => { root.setProperty("--chat-top", `${vv.offsetTop}px`); root.setProperty("--chat-h", `${vv.height}px`); };
+    fit();
+    vv.addEventListener("resize", fit);
+    vv.addEventListener("scroll", fit);
+    return () => { vv.removeEventListener("resize", fit); vv.removeEventListener("scroll", fit); };
+  }, [open]);
   useEffect(() => { if (premiseId) setNeedHome(false); }, [premiseId]);
 
   const close = () => { setOpen(false); launcherRef.current?.focus(); };
@@ -138,6 +153,7 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
     };
     setPreparationNeeds(null);
     setText("");
+    if (selectedPreparationNeeds.length) onNeeds(requestProfile.declared_needs);
     submitHistory(next, preparationNeeds, requestProfile);
   };
   const retry = () => {
