@@ -301,10 +301,11 @@ def _storm_percentiles() -> dict[str, float]:
 
 
 @lru_cache(maxsize=256)
-def customer_context(severity: float, crews: int, crew_size: int, road_access: str = "normal") -> dict | None:
-    """For the CUSTOMER view: the replayable real storm closest to this severity, replayed with the customer's crew
-    scenario (deterministic run only, fast). Returns {label, crews, hours_to_90pct} or None (synthetic network,
-    or a storm milder than any replayable one: no honest comparison to make)."""
+def match_storm(severity: float) -> dict | None:
+    """THE one answer to "which real storm is this like?": the replayable storm whose severity percentile is
+    closest to this one. Used by the customer answer (replay_storm_id + storm_context), GET /api/planner/match
+    (the storm banner) and the console, so they can never disagree. Returns {storm_id, label} or None (synthetic
+    network, or a storm milder than any replayable one by more than planner.context_margin_pct)."""
     if not available():
         return None
     pct = _storm_percentiles()
@@ -312,7 +313,18 @@ def customer_context(severity: float, crews: int, crew_size: int, road_access: s
     if not cands or severity < min(pct[s["storm_id"]] for s in cands) - PCFG["context_margin_pct"]:
         return None
     ref = min(cands, key=lambda s: abs(pct[s["storm_id"]] - severity))
+    return {"storm_id": ref["storm_id"], "label": ref["label"]}
+
+
+@lru_cache(maxsize=256)
+def customer_context(severity: float, crews: int, crew_size: int, road_access: str = "normal") -> dict | None:
+    """For the CUSTOMER view: the matched storm (match_storm) replayed with the customer's crew scenario
+    (deterministic run only, fast). Returns {storm_id, label, crews, hours_to_90pct} or None."""
+    ref = match_storm(severity)
+    if ref is None:
+        return None
     st = _storm(ref["storm_id"])
     _, curve, _ = _simulate(st, _hours(st, crew_size, road_access, 1.0), crews, CFG["assessment_hours"], record=True)
     h90 = _time_to(curve, 0.9, st.customers_out)
-    return {"label": ref["label"], "crews": crews, "hours_to_90pct": h90} if h90 else None
+    return ({"storm_id": ref["storm_id"], "label": ref["label"], "crews": crews, "hours_to_90pct": h90}
+            if h90 else None)

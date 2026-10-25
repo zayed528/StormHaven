@@ -39,17 +39,28 @@ real = pytest.mark.skipif(not REAL, reason="real AEP data / damage_work.csv not 
 
 
 @pytest.fixture(scope="module")
-def planner_real():
-    """The planner module bound to the REAL store (the app-level store is synthetic during tests)."""
+def _real_store():
+    """The real AEP store, loaded once per test module (it takes ~1.5 s)."""
+    from app.core import data_loader
+    return data_loader._load_processed()
+
+
+@pytest.fixture
+def planner_real(_real_store):
+    """The planner module bound to the REAL store for ONE test (the app-level store is synthetic during tests);
+    restored afterwards so later synthetic tests aren't affected."""
     from app.core import data_loader
     from app.engines import planner
-    real_store = data_loader._load_processed()
+    real_store = _real_store
     saved = data_loader.get_store
-    planner._work.cache_clear(); planner._storm.cache_clear(); planner.plan.cache_clear()
+    caches = [planner._work, planner._storm, planner.plan, planner.match_storm, planner.customer_context]
+    for c in caches:
+        c.cache_clear()
     planner.get_store = lambda: real_store
     yield planner
     planner.get_store = saved
-    planner._work.cache_clear(); planner._storm.cache_clear(); planner.plan.cache_clear()
+    for c in caches:
+        c.cache_clear()
 
 
 @real
@@ -143,3 +154,50 @@ def test_storm_context_sentence_moves_with_crews(planner_real):
     planner_real.customer_context.cache_clear()
     assert few and many and few != many and "9 in 10" in few and "replay" in few
     assert mild is None
+
+
+# ---------------------------------------------------------------- one source of truth for "which storm is this like?"
+def test_replay_storm_none_on_synthetic_network():
+    from app.core.data_loader import get_store
+    from app.engines.restoration import replay_storm_id
+    assert replay_storm_id(get_store(), StormScenario(severity_percentile=99)) is None
+    assert client.get("/api/planner/match", params={"severity": 99}).json() == {"storm_id": None, "label": None}
+    r = run_concierge(ConciergeRequest(premise_id=CKT3, scenario=StormScenario(severity_percentile=99)))
+    assert getattr(r.restoration, "replay_storm_id", None) is None
+
+
+@real
+def test_replay_storm_id_matches_storm_list_sentence_and_match_endpoint(planner_real):
+    from app.engines.restoration import replay_storm_id, storm_context
+    store = planner_real.get_store()
+    known = {s["storm_id"]: s["label"] for s in planner_real.storms()}
+    for sev in (97, 99):
+        sc = StormScenario(severity_percentile=sev)
+        sid = replay_storm_id(store, sc)
+        assert sid in known                                         # same ids as /api/planner/storms
+        assert known[sid] in storm_context(store, sc)               # the sentence is about the same storm
+        m = client.get("/api/planner/match", params={"severity": sev}).json()
+        assert m == {"storm_id": sid, "label": known[sid]}          # banner/console match == customer answer
+    assert replay_storm_id(store, StormScenario(severity_percentile=50)) is None
+    assert client.get("/api/planner/match", params={"severity": 50}).json() == {"storm_id": None, "label": None}
+    assert replay_storm_id(store, StormScenario(severity_percentile=99)) != replay_storm_id(
+        store, StormScenario(severity_percentile=97))              # Record (Feb 2025) vs Severe (Sep 2024)
+
+
+def test_match_endpoint_validates_severity():
+    assert client.get("/api/planner/match", params={"severity": 150}).status_code == 422
+
+
+def test_match_endpoint_is_on_even_without_operator_routes(monkeypatch):
+    """The banner needs /api/planner/match on the public server, where operator routes are switched off."""
+    import importlib
+    import app.main as main
+    monkeypatch.delenv("STORMHAVEN_ENABLE_OPERATOR_ROUTES", raising=False)
+    fresh = importlib.reload(main)
+    try:
+        c = TestClient(fresh.app)
+        assert c.get("/api/planner/match", params={"severity": 99}).status_code == 200
+        assert c.get("/api/planner/storms").status_code == 404          # the full planner stays operator-only
+    finally:
+        monkeypatch.setenv("STORMHAVEN_ENABLE_OPERATOR_ROUTES", "true")
+        importlib.reload(main)

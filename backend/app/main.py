@@ -19,6 +19,7 @@ from app.locate import router as locate_router               # noqa: E402  (Abby
 from app.core.data_loader import get_store                      # noqa: E402
 from app.map_layers import map_layers                           # noqa: E402
 from app.planner_routes import router as planner_router        # noqa: E402
+from app.planner_routes import customer_router as planner_match_router   # noqa: E402
 from app.schemas import ChatRequest, ConciergeRequest, ConciergeResponse  # noqa: E402
 from app.service import run_concierge                           # noqa: E402
 from app.weather import weather_context                         # noqa: E402
@@ -65,6 +66,8 @@ if not _PUBLIC_DEMO and _env_enabled("STORMHAVEN_ENABLE_NOTIFY"):
     app.include_router(notify_router)
 # Onboarding location lookup (GET /api/locate): app/locate.py. Premise ID / geolocation -> neighborhood zoom.
 app.include_router(locate_router)
+# Customer-facing storm match for the banner (GET /api/planner/match): always on, returns only a storm id + label.
+app.include_router(planner_match_router)
 
 
 @app.get("/api/health")

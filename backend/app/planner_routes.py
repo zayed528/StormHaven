@@ -2,9 +2,11 @@
 Storm restoration planner API (utility view).   Owner: Akshat (engine) / Abby (console UI)
   GET /api/planner/storms          real storms that can be replayed, largest first
   GET /api/planner/plan?storm_id=&crews=&crew_size=&road_access=&workload=
+  GET /api/planner/match?severity=   which real storm a severity percentile is like (no replay run: fast)
 Every number is a model estimate for planning (labelled source: model_estimate). No equipment IDs, customer
 IDs, coordinates, or facility identities are returned: equipment kind, counts and hours only.
-Real AEP data only; on the synthetic network both endpoints answer {"available": false}.
+Real AEP data only: on the synthetic network /storms and /plan answer {"available": false} and /match answers
+{"storm_id": null, "label": null}.
 """
 from __future__ import annotations
 
@@ -14,6 +16,9 @@ from app.engines import planner
 from app.schemas import AccessLevel
 
 router = APIRouter(prefix="/api/planner", tags=["planner"])
+# Customer-facing piece (the storm banner calls it before a home is chosen). Register it ALWAYS in main.py,
+# not behind STORMHAVEN_ENABLE_OPERATOR_ROUTES: it returns only a storm id and month label.
+customer_router = APIRouter(prefix="/api/planner", tags=["planner"])
 
 
 @router.get("/storms")
@@ -22,6 +27,14 @@ def planner_storms():
         return {"available": False, "storms": [],
                 "reason": "Storm replay needs the real AEP data (run `make data`)."}
     return {"available": True, "storms": planner.storms()}
+
+
+@customer_router.get("/match")
+def planner_match(severity: float = Query(..., ge=0, le=100, description="storm severity percentile (0-100)")):
+    """The real storm this severity is matched to: the same match the customer answer uses (replay_storm_id).
+    {storm_id: null, label: null} for storms milder than any replayable one, and on the synthetic network."""
+    ref = planner.match_storm(round(severity, 1))
+    return {"storm_id": ref["storm_id"] if ref else None, "label": ref["label"] if ref else None}
 
 
 @router.get("/plan")

@@ -219,6 +219,16 @@ def storm_context(store: DataStore, sc: StormScenario) -> str | None:
             f"had power back within {when}.")
 
 
+def replay_storm_id(store: DataStore, sc: StormScenario) -> str | None:
+    """storm_id of the real storm this scenario is matched to (planner.match_storm), the same storm the
+    storm_context sentence describes. Values match GET /api/planner/storms -> storm_id. None when there's no match."""
+    if store.is_synthetic:
+        return None
+    from app.engines import planner                         # local import: planner needs real data
+    ref = planner.match_storm(round(sc.severity_percentile, 1))
+    return ref["storm_id"] if ref else None
+
+
 def estimate_restoration(store: DataStore, pr: PathRisk, sc: StormScenario,
                          risk_confidence: str, outage_confirmed: bool = False) -> RestorationResponse:
     """Public entry point (called by service.py). Reuses the PathRisk from the risk engine so both
@@ -304,4 +314,8 @@ def estimate_restoration(store: DataStore, pr: PathRisk, sc: StormScenario,
         confirmed_etr=None,   # never set by the model; service.py fills it from utility_status only
         # Customer sentence from the storm replay. Sent only once schemas.py has the field (Jaid), so this
         # file never breaks the response contract.
-        **({"storm_context": storm_context(store, sc)} if "storm_context" in RestorationResponse.model_fields else {}))
+        **({"storm_context": storm_context(store, sc)} if "storm_context" in RestorationResponse.model_fields else {}),
+        # Which real storm that sentence is about (Nandan's console/banner select by it). Sent once schemas.py has
+        # the field (Jaid).
+        **({"replay_storm_id": replay_storm_id(store, sc)}
+           if "replay_storm_id" in RestorationResponse.model_fields else {}))
