@@ -1,0 +1,68 @@
+/* StormHaven PHONE APP layout (app.html only; loaded after styles.css, so these win). Everything is scoped to
+   .phone-app, so the web app (index.html) never sees it.   Owner: Nandan */
+
+/* ---- Header: title + one menu button; language, theme and "Change home" open in a small glass panel ---- */
+.phone-app .topbar .header-row { flex-wrap: nowrap; }
+.phone-app .menu-btn { display: grid; place-items: center; width: 40px; height: 40px; margin-left: auto; padding: 0;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.phone-app .menu-btn[aria-expanded="true"] { background: var(--fill); border-color: var(--fill); color: var(--on-fill); }
+.phone-app .topbar .header-actions { display: none; }
+.phone-app .topbar .header-actions.open { display: grid; justify-items: stretch; gap: .6rem; position: absolute; z-index: 950;
+  top: calc(100% + .4rem); right: .6rem; min-width: 210px; padding: .75rem; border-radius: 16px;
+  background: var(--glass-strong); border: 1px solid var(--line);
+  backdrop-filter: blur(18px) saturate(1.6); -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  box-shadow: 0 12px 32px var(--shadow); animation: menu-in .18s ease-out; }
+.phone-app .header-actions.open .lang-switch { display: flex; }
+.phone-app .header-actions.open .lang-switch button { flex: 1; min-height: 40px; font-size: .9rem; }
+.phone-app .header-actions.open .theme-switch { justify-content: center; }
+.phone-app .header-actions.open .theme-switch button { flex: 1; width: auto; height: 40px; }
+.phone-app .header-actions.open .toolbar-btn { min-height: 40px; font-size: .9rem; }
+@keyframes menu-in { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .phone-app .header-actions.open { animation: none; } }
+
+/* ---- Chat: a full-screen sheet fitted to the VISIBLE screen (ChatPanel keeps --chat-top / --chat-h in step with
+   the on-screen keyboard), with room for the notch and home bar. 16px text box: iPhones zoom in on smaller. ---- */
+@media (max-width: 600px) {
+  .phone-app .chat { left: 0; right: 0; width: auto; border-radius: 0;
+    top: var(--chat-top, 0px); bottom: auto; height: var(--chat-h, 100dvh);
+    padding-top: calc(.75rem + env(safe-area-inset-top, 0px)); padding-bottom: calc(.6rem + env(safe-area-inset-bottom, 0px)); }
+  .phone-app .chat:not([hidden]) { transform-origin: bottom center; }
+  .phone-app .chat input { font-size: 16px; }
+  .phone-app .chat .chat-close { min-width: 44px; min-height: 44px; }
+  /* the sheet covers the screen: the robot hides behind it; the x closes it */
+  .phone-app .chat-launcher[aria-expanded="true"] { visibility: hidden; }
+}
+
+/* ---- Answer cards: swipe down to close. A small handle on top says so; the x stays only for keyboard users
+   (it appears when focused). ---- */
+.phone-app .dock { transition: transform .22s ease; touch-action: pan-x pan-y; }
+.phone-app .dock-grabber { justify-self: center; width: 44px; height: 5px; border-radius: 999px; margin-bottom: .1rem;
+  background: var(--muted); opacity: .55; }
+.phone-app .dock-close:not(:focus-visible) { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); border: 0; }
+.phone-app .dock .card { overscroll-behavior: contain; }
+@media (prefers-reduced-motion: reduce) { .phone-app .dock { transition: none; } }
+
+/* ---- Map legend: a side tab on the right edge. Closed: only the "Outage risk" tab shows; open: the legend panel
+   slides out next to it. ---- */
+.phone-app .risk-side { --panel-w: 190px; position: fixed; z-index: 850; right: 0;
+  top: calc(var(--chrome-h, 120px) + .6rem); display: flex; align-items: flex-start;
+  transform: translateX(var(--panel-w)); transition: transform .3s cubic-bezier(.2, .9, .3, 1); }
+.phone-app .risk-side.open { transform: none; }
+/* the tab: a thin strip with "Outage risk" written along it (reading bottom to top), so only a sliver shows.
+   It's turned 180deg, so its rounded corners / border are set on the right to end up on the left on screen. */
+.phone-app .risk-side-tab { margin-top: .4rem; padding: .7rem .3rem; font: inherit; font-size: .74rem; font-weight: 700;
+  letter-spacing: .03em; writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; color: var(--ink);
+  cursor: pointer; border: 1px solid var(--line); border-left: none; border-radius: 0 10px 10px 0;
+  background: var(--glass-strong); backdrop-filter: blur(16px) saturate(1.5); -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  box-shadow: 0 4px 14px var(--shadow); }
+.phone-app .risk-side-panel { width: var(--panel-w); box-sizing: border-box; padding: .75rem .85rem;
+  border: 1px solid var(--line); border-right: none; border-radius: 0 0 0 14px; background: var(--glass-strong);
+  backdrop-filter: blur(16px) saturate(1.5); -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  box-shadow: -6px 8px 22px var(--shadow); visibility: hidden; transition: visibility 0s .3s; }
+.phone-app .risk-side.open .risk-side-panel { visibility: visible; transition: none; }
+.phone-app .risk-side-panel ul { list-style: none; margin: 0 0 .6rem; padding: 0; display: grid; gap: .4rem; }
+.phone-app .risk-side-panel li { display: flex; align-items: center; gap: .5rem; font-size: .9rem; }
+.phone-app .risk-dot { width: .8rem; height: .8rem; border-radius: 50%; flex: none; }
+.phone-app .risk-heat { display: grid; gap: .3rem; margin: 0; font-size: .78rem; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .phone-app .risk-side { transition: none; } }

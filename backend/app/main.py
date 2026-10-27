@@ -44,6 +44,11 @@ def _env_enabled(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in {"1", "true", "yes"}
 
 
+def _env_enabled_by_default(name: str) -> bool:
+    """On unless the variable is explicitly set to an off value (0 / false / no / off)."""
+    return os.getenv(name, "").strip().lower() not in {"0", "false", "no", "off"}
+
+
 def _cors_origins() -> list[str]:
     configured = [origin.strip() for origin in os.getenv("STORMHAVEN_CORS_ORIGINS", "").split(",") if origin.strip()]
     if _env_enabled("STORMHAVEN_PRODUCTION"):
@@ -57,8 +62,10 @@ app.add_middleware(CORSMiddleware, allow_origins=_cors_origins(), allow_methods=
                    allow_headers=["Content-Type", "Authorization"])
 # Compress responses over 1 KB: the real-data map payload is several MB of numbers and shrinks ~5-10x.
 app.add_middleware(GZipMiddleware, minimum_size=1000)
-# Operator and notification routes are disabled unless explicitly enabled behind an authenticated boundary.
-if not _PUBLIC_DEMO and _env_enabled("STORMHAVEN_ENABLE_OPERATOR_ROUTES"):
+# Operator console + planner routes: ON by default (team decision, 2026-10-25), so the Utility console works with no
+# setup; set STORMHAVEN_ENABLE_OPERATOR_ROUTES=false to turn them off. They have no login yet. Never in the public demo.
+# Notification routes stay opt-in (they can send real texts).
+if not _PUBLIC_DEMO and _env_enabled_by_default("STORMHAVEN_ENABLE_OPERATOR_ROUTES"):
     app.include_router(console_router)
     app.include_router(planner_router)
 if not _PUBLIC_DEMO and _env_enabled("STORMHAVEN_ENABLE_NOTIFY"):

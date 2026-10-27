@@ -361,7 +361,7 @@ input[type="range"] { accent-color: var(--fill); }
 .dock .safety ul { margin: .4rem 0 .1rem; }
 .dock .safety-intro { margin: 0; display: inline; font-size: .92rem; }
 .dock .cols { grid-template-columns: 1fr 1.45fr 1.2fr; gap: .7rem; align-items: end; }
-.dock .card { max-height: min(46vh, 520px); overflow-y: auto; border: 1px solid var(--line); border-radius: 12px;
+.dock .card { max-height: max(220px, min(41vh, 470px, calc(100vh - var(--chrome-h, 110px) - 345px))); overflow-y: auto; border: 1px solid var(--line); border-radius: 12px;
   background: var(--glass-strong); backdrop-filter: blur(12px) saturate(1.2); -webkit-backdrop-filter: blur(12px) saturate(1.2);
   box-shadow: 0 8px 28px var(--shadow); animation: card-in .55s cubic-bezier(.2, .8, .2, 1) both;
   animation-delay: calc(var(--i, 0) * 120ms + 80ms); }
@@ -549,3 +549,69 @@ input[type="range"] { accent-color: var(--fill); }
    An info-tinted callout, so it reads as evidence behind the estimate, not just more body text. */
 .storm-context { margin: .5rem 0 0; padding: .5rem .7rem; font-size: .9rem; border-left: 4px solid var(--accent);
   background: var(--tint-info); border-radius: 0 6px 6px 0; }
+
+/* ============================================================================================================
+   Confirmed by AEP vs. our estimate + "What you can do" (risk card). The phone app (app.html) adds its own layout
+   in src/app/app.css.
+   ============================================================================================================ */
+/* Web app: small print right after the safety strip's message (on the same line when there's room), lighter, like a
+   footnote. */
+.confirmed-note { display: inline; margin-left: .5rem; font-size: .74rem; font-weight: 400; line-height: 1.3;
+  opacity: .78; }
+.confirmed-note strong { font-weight: 600; margin-right: .2rem; }
+.confirmed-note.yes { opacity: 1; }
+/* when there are no safety rules to show, the same note sits alone above the cards */
+.confirmed-line { margin: 0; padding: .3rem .8rem; border-radius: 999px; justify-self: start;
+  background: var(--glass-strong); border: 1px solid var(--line); color: var(--ink); }
+.confirmed-line .confirmed-note { margin: 0; }
+.card .actions { padding-left: 1.1rem; }
+.card .actions li { margin-bottom: .3rem; }
+.action-reason { display: block; font-size: .8rem; }
+/* Cards' height (rule above): a little shorter, and never so tall that the cards' x reaches up into the map legend
+   (header + legends + the safety strip take about --chrome-h + 345px). */
+
+/* Map legend: the four risk colors, under the heat key (HTML, so it always lists all four whatever the storm) */
+.band-legend { padding: .4rem .65rem .45rem; border-radius: 6px; background: var(--overlay); color: var(--ink);
+  box-shadow: 0 1px 4px var(--shadow); font-size: .8rem; }
+.band-legend p { margin: 0 0 .25rem; font-weight: 700; font-size: .82rem; }
+.band-legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .15rem; }
+.band-legend li { display: flex; align-items: center; gap: .45rem; }
+.band-dot { width: .6rem; height: .6rem; border-radius: 50%; flex: none; }
+
+/* Safety strip: the storm the answer is for, after the risk title, with the storm's own color dot (same colors as the
+   What-if buttons: Typical green, Strong yellow, Severe orange, Record red). The strip's own color is the home's risk. */
+.safety-storm { display: inline-flex; align-items: center; gap: .35rem; margin-left: .45rem; padding: .05rem .55rem;
+  border-radius: 999px; font-size: .82rem; font-weight: 700; white-space: nowrap;
+  background: color-mix(in srgb, var(--surface) 70%, transparent); border: 1px solid var(--line); }
+.safety-storm::before { content: ""; width: .6rem; height: .6rem; border-radius: 50%; background: #4C9F70; }
+.safety-storm.lvl-1::before { background: #E3B23C; }
+.safety-storm.lvl-2::before { background: #D9682B; }
+.safety-storm.lvl-3::before { background: #A4243B; }
+@media (max-width: 760px) { .safety-storm { font-size: .74rem; padding: 0 .45rem; } }
+
+/* Web app: a smaller x for the cards, sitting lower, so it stays clear of the map legend */
+.dock-close { top: -2.25rem; width: 1.8rem; height: 1.8rem; font-size: 1.1rem; }
+
+/* the outage length after the risk title ("· if you lose power: 17-32 hours"): same line, a little lighter */
+.safety-range { font-weight: 600; }
+
+/* Chat robot greeting on page load (both apps): two bounces, then a "Hi! I am Jed..." bubble to its right. */
+@keyframes jed-bounce {
+  0%, 100% { transform: translateY(0); animation-timing-function: cubic-bezier(.3, 0, .5, 1); }
+  40% { transform: translateY(-22px); animation-timing-function: cubic-bezier(.5, 0, .7, 1); }
+  70% { transform: translateY(0) scale(1.06, .94); }
+  85% { transform: translateY(-4px); }
+}
+.chat-launcher.intro-bounce { animation: jed-bounce .6s .5s 2 both; }
+.chat-launcher { font: inherit; }
+.jed-bubble { position: absolute; left: calc(100% + 14px); top: 50%; transform: translateY(-50%); z-index: 1;
+  padding: .55rem .85rem; border-radius: 14px; white-space: nowrap; font-size: .92rem; font-weight: 600; line-height: 1.3;
+  color: var(--ink); background: var(--surface); border: 1px solid var(--line); box-shadow: 0 8px 24px var(--shadow);
+  transform-origin: left center; animation: jed-bubble-in .35s cubic-bezier(.2, .9, .3, 1.3); }
+/* the little tail pointing at the robot */
+.jed-bubble::before { content: ""; position: absolute; left: -6px; top: 50%; width: 10px; height: 10px;
+  background: var(--surface); border-left: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  transform: translateY(-50%) rotate(45deg); }
+@keyframes jed-bubble-in { from { opacity: 0; transform: translateY(-50%) scale(.6); } to { opacity: 1; transform: translateY(-50%); } }
+@media (prefers-reduced-motion: reduce) { .chat-launcher.intro-bounce, .jed-bubble { animation: none; } }
+@media (max-width: 400px) { .jed-bubble { font-size: .84rem; padding: .5rem .7rem; } }

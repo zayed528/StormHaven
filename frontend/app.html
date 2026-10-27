@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover: when installed on a phone, the app may draw under the notch / home bar; styles.css pads
+         the floating buttons with the safe-area insets. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="StormHaven: storm outage risk, restoration range, preparation, and alerts." />
+    <meta name="color-scheme" content="light dark" />
+    <!-- The PHONE APP (src/app/). Installable on its own (app.webmanifest opens /app.html): manifest, icons, and the browser/status-bar color for each theme. -->
+    <link rel="manifest" href="/app.webmanifest" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#14213D" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0F1623" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="StormHaven" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>StormHaven</title>
+    <!-- Apply the theme before the first paint (saved choice, else the computer's setting), so dark-mode
+         visitors never see a white flash. PhoneApp.jsx keeps it in sync after that. -->
+    <script>
+      try {
+        var t = localStorage.getItem("stormhaven-theme");
+        if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = t;
+      } catch (e) { /* storage blocked: styles.css falls back to light */ }
+    </script>
+  </head>
+  <body><div id="root"></div><script type="module" src="/src/app/main.jsx"></script></body>
+</html>

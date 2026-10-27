@@ -5,12 +5,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import OutageMap from "./components/OutageMap.jsx";
-import { FORECAST_PCT, StormBanner } from "./components/ScenarioControls.jsx";
+import { FORECAST_PCT, STORM_PCTS, StormBanner } from "./components/ScenarioControls.jsx";
 import ResultsPanel from "./components/ResultsPanel.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
 import Console from "./console/Console.jsx";          // Abby's utility console (fetches its own data)
 import OnboardingStandIn from "./components/OnboardingStandIn.jsx";
-import { getConcierge, getHealth, getMap, getWeather } from "./api/client.js";
+import { getConcierge, getHealth, getMap, getWeather, mapCached } from "./api/client.js";
 import { STRINGS, fmtRange } from "./i18n.js";
 
 // Onboarding (first screen): Abby's onboarding/Onboarding.jsx as soon as that file exists, else the stand-in.
@@ -19,8 +19,9 @@ const ONBOARDING = import.meta.glob("./onboarding/Onboarding.jsx", { eager: true
 const Onboarding = ONBOARDING["./onboarding/Onboarding.jsx"]?.default ?? OnboardingStandIn;
 // "What if...? 50% more crews": the same comparison the engine's own driver line makes (int(20 x 1.5) + 1).
 const BASE_CREWS = 20, MORE_CREWS = 31;
-// Operator APIs are disabled in public deployments. Internal builds may opt in explicitly.
-const ENABLE_OPERATOR_CONSOLE = import.meta.env.VITE_ENABLE_OPERATOR_CONSOLE === "1";
+// Utility console tab: ON by default (team decision, 2026-10-25). Build with VITE_ENABLE_OPERATOR_CONSOLE=0 to hide it.
+// (The public demo never shows it either way.)
+const ENABLE_OPERATOR_CONSOLE = import.meta.env.VITE_ENABLE_OPERATOR_CONSOLE !== "0";
 
 // Which real storm the customer's answer was compared with (the planner replay behind the "In our replay of the
 // ... storm" sentence). The console replays the same storm. TEMPORARY: the answer doesn't name the storm by ID yet,
@@ -72,6 +73,7 @@ export default function App() {
   const [view, setView] = useState("customer");    // "customer" | "console"
   const [theme, setTheme] = useState(initialTheme); // "light" | "dark"
   const [result, setResult] = useState(null);
+  const [resultPct, setResultPct] = useState(null);   // the storm strength `result` was computed for
   const [changes, setChanges] = useState(null);    // what moved vs. the previous answer, for the highlight
   const [error, setError] = useState(null);
   const [onboarding, setOnboarding] = useState(true);   // first screen until the customer finishes (or skips) it
@@ -79,7 +81,6 @@ export default function App() {
   const [dockOpen, setDockOpen] = useState(true);      // the answer cards (closed with x / Esc; a new home reopens them)
   const headerRef = useRef(null);
   const stormRef = useRef(null);                     // the storm banner floating under the header
-  const [chromeH, setChromeH] = useState(0);         // px covered at the top: header + storm toggles (the map draws under)
   const t = STRINGS[lang];
   const publicDemo = health?.mode === "public_demo";
   const demoLocations = publicDemo ? (layers?.premises ?? []).slice(0, 3) : [];
@@ -94,6 +95,9 @@ export default function App() {
   // Set when a location is ENTERED (onboarding or premise ID box) without a zoom target: when the answer arrives,
   // zoom to the dot it names (map_point_id). Clicking a dot doesn't zoom: the customer is already looking at it.
   const zoomToResult = useRef(false);
+  // Only the NEWEST answer / map is shown. Quick "What if" taps send several requests; on a slow connection an older
+  // one can finish last and would otherwise put the previous storm's risk (text and color) back on screen.
+  const answerReq = useRef(0), mapReq = useRef(0);
 
   // Only declared needs and channel TYPES are sent; no names, phone numbers, or addresses.
   const profile = { declared_needs: needs, alerts_enrolled: enrolled, channels: enrolled ? ["sms"] : [], language: lang };
@@ -162,7 +166,6 @@ export default function App() {
       document.documentElement.style.setProperty("--header-h", `${headerRef.current?.offsetHeight ?? 0}px`);
       const h = chromeBottom();
       document.documentElement.style.setProperty("--chrome-h", `${h}px`);
-      setChromeH(h);
     };
     const ro = new ResizeObserver(update);
     [headerRef.current, stormRef.current].forEach((el) => el && ro.observe(el));
@@ -208,14 +211,25 @@ export default function App() {
     setOnboarding(true);
   };
 
-  // Map colors depend only on storm strength, so refetch the map only when severity changes.
-  // Debounced: the real-data map is ~1 MB and takes ~1 s, so don't fire on every slider tick.
+  // Map colors depend only on storm strength, so refetch the map only when severity changes. A map already downloaded
+  // (api/client.js keeps them) shows at once; a new one waits 300 ms, so quick taps don't each start a ~5 MB download.
   useEffect(() => {
+    const sev = scenario.severity_percentile;
     const tm = setTimeout(() => {
-      getMap(scenario.severity_percentile).then((l) => { setLayers(l); setError(null); }).catch((e) => setError(e.message));
-    }, 300);
+      const id = ++mapReq.current;
+      getMap(sev).then((l) => { if (id === mapReq.current) { setLayers(l); setError(null); } })
+        .catch((e) => { if (id === mapReq.current) setError(e.message); });
+    }, mapCached(sev) ? 0 : 300);
     return () => clearTimeout(tm);
   }, [scenario.severity_percentile]);
+  // Once the first map is on screen, quietly download the other storm strengths one after another, so the What-if
+  // storm buttons don't wait ~2 s for a map. (Web app only: on a phone that would be ~15 MB of mobile data.)
+  const prefetched = useRef(false);
+  useEffect(() => {
+    if (!layers || prefetched.current) return;
+    prefetched.current = true;
+    STORM_PCTS.filter((p) => !mapCached(p)).reduce((chain, p) => chain.then(() => getMap(p)).catch(() => {}), Promise.resolve());
+  }, [layers]);
 
   // Re-ask the backend whenever the location or any input changes. All numbers come from the API;
   // the frontend never computes risk or times itself.
@@ -223,21 +237,23 @@ export default function App() {
     if (!premise) return;
     const tm = setTimeout(() => {   // debounce slider drags
       const prev = last.current.premise === premise ? last.current : { range: null, scenario: null, result: null };
+      const id = ++answerReq.current;
       getConcierge({
         premise_id: premise, scenario, profile,
         previous_range_text: prev.range, previous_scenario: prev.scenario,
         utility_status: utilityStatus,
       }).then((r) => {
+        if (id !== answerReq.current) return;   // an older request finished late: drop it
         setChanges(diff(prev.result, r));
-        setResult(r); setError(null);
+        setResult(r); setResultPct(scenario.severity_percentile); setError(null);
         shownPrev.current = { range: prev.range, scenario: prev.scenario };
         last.current = { premise, range: r.restoration.range_short, scenario, result: r };
         if (focusResults.current) {
           focusResults.current = false;
           setTimeout(() => document.getElementById("results")?.focus(), 0);
         }
-      }).catch((e) => setError(e.message));
-    }, 200);
+      }).catch((e) => { if (id === answerReq.current) setError(e.message); });
+    }, 80);   // short: the What-if controls are taps, not sliders
     return () => clearTimeout(tm);      // cancel the pending call if inputs change again within 200 ms
   }, [premise, scenario, needs, enrolled, utilityConfirmed, lang]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -302,7 +318,7 @@ export default function App() {
       {/* Customer view stays mounted while the console is open, so the map, selection and chat survive the trip. */}
       <div className="customer" hidden={view !== "customer"}>
         <div className="map map-full" role="region" aria-label={t.mapAria}>
-          <OutageMap t={t} dark={theme === "dark"} layers={layers} focus={focus} topInset={chromeH}
+          <OutageMap t={t} dark={theme === "dark"} layers={layers} focus={focus}
             selectedId={result?.map_point_id ?? premise} onSelect={selectHome} />
         </div>
 
@@ -323,11 +339,15 @@ export default function App() {
 
         {/* key = the home: a new home remounts the cards, so they slide in again; storm changes just update them. */}
         {showDock && <ResultsPanel key={premise} t={t} result={result} changes={changes} onClose={() => setDockOpen(false)}
+          stormPct={resultPct}
           whatIf={{ scenario, onScenario: setScenario, baseCrews: BASE_CREWS, moreCrews: MORE_CREWS }}
           notifyRequest={publicDemo ? null : { premise_id: premise, scenario, profile,
                            previous_range_text: shownPrev.current.range, previous_scenario: shownPrev.current.scenario }} />}
 
-        <ChatPanel t={t} premiseId={premise} scenario={scenario} profile={profile} utilityStatus={utilityStatus} />
+        {/* Needs ticked in the chat become the app's needs too, so the cards, alerts and texts follow them. */}
+        <ChatPanel t={t} premiseId={premise} scenario={scenario} profile={profile} utilityStatus={utilityStatus}
+          onNeeds={setNeeds}
+          risk={result ? { band: result.risk.band, probability: result.risk.probability, range: result.restoration.range_short } : null} />
       </div>
 
       {/* One-way link: the console plans against the customer view's scenario (storm, crews, roads) and the same

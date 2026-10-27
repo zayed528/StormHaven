@@ -55,31 +55,39 @@ def test_public_startup_accepts_only_explicit_synthetic_store(monkeypatch):
         startup.main()
 
 
-def test_protected_routes_are_not_enabled_without_flags(monkeypatch):
+def test_route_flag_defaults(monkeypatch):
+    # Operator console: on unless explicitly turned off. Notify: off unless explicitly turned on.
     monkeypatch.delenv("STORMHAVEN_ENABLE_OPERATOR_ROUTES", raising=False)
     monkeypatch.delenv("STORMHAVEN_ENABLE_NOTIFY", raising=False)
-    assert main._env_enabled("STORMHAVEN_ENABLE_OPERATOR_ROUTES") is False
+    assert main._env_enabled_by_default("STORMHAVEN_ENABLE_OPERATOR_ROUTES") is True
     assert main._env_enabled("STORMHAVEN_ENABLE_NOTIFY") is False
+    for off in ("false", "0", "no", "off"):
+        monkeypatch.setenv("STORMHAVEN_ENABLE_OPERATOR_ROUTES", off)
+        assert main._env_enabled_by_default("STORMHAVEN_ENABLE_OPERATOR_ROUTES") is False
 
 
-def test_protected_routes_are_absent_by_default_in_a_fresh_process():
+def _routes_in_fresh_process(flags: dict, checks: str):
     root = Path(__file__).resolve().parents[2]
     env = os.environ.copy()
-    env.update({
-        "PYTHONPATH": str(root / "backend"),
-        "STORMHAVEN_DATA": "synthetic",
-        "STORMHAVEN_ENABLE_OPERATOR_ROUTES": "",
-        "STORMHAVEN_ENABLE_NOTIFY": "",
-        "STORMHAVEN_CORS_ORIGINS": "http://localhost:5173",
-    })
-    command = [
-        sys.executable, "-c",
-        "from fastapi.testclient import TestClient; from app.main import app; "
-        "c=TestClient(app); assert c.get('/api/console/circuits').status_code == 404; "
-        "assert c.get('/api/planner/storms').status_code == 404; "
-        "assert c.post('/api/notify', json={'message_key': 'pre_storm'}).status_code == 404",
-    ]
+    env.pop("STORMHAVEN_ENABLE_OPERATOR_ROUTES", None)
+    env.pop("STORMHAVEN_ENABLE_NOTIFY", None)
+    env.update({"PYTHONPATH": str(root / "backend"), "STORMHAVEN_DATA": "synthetic",
+                "STORMHAVEN_CORS_ORIGINS": "http://localhost:5173", **flags})
+    command = [sys.executable, "-c",
+               "from fastapi.testclient import TestClient; from app.main import app; c=TestClient(app); " + checks]
     subprocess.run(command, cwd=root, env=env, check=True, capture_output=True, text=True)
+
+
+def test_console_on_and_notify_off_by_default_in_a_fresh_process():
+    _routes_in_fresh_process({}, "assert c.get('/api/console/circuits').status_code != 404; "
+                                 "assert c.get('/api/planner/storms').status_code != 404; "
+                                 "assert c.post('/api/notify', json={'message_key': 'pre_storm'}).status_code == 404")
+
+
+def test_console_can_be_turned_off_in_a_fresh_process():
+    _routes_in_fresh_process({"STORMHAVEN_ENABLE_OPERATOR_ROUTES": "false"},
+                             "assert c.get('/api/console/circuits').status_code == 404; "
+                             "assert c.get('/api/planner/storms').status_code == 404")
 
 
 def test_startup_and_container_configuration():

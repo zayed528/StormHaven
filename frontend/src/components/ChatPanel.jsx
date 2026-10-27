@@ -30,7 +30,11 @@ const RobotIcon = () => (
   </svg>
 );
 
-export default function ChatPanel({ t, premiseId, scenario, profile, utilityStatus }) {
+const RISKY_BANDS = new Set(["Moderate", "High", "Very High"]);
+
+// onNeeds(needs): tell the app about needs ticked here, so the answer cards, alerts and texts use them too.
+// risk = {band, probability, range} of the answer on screen (for the hardcoded PS5 reply), or null.
+export default function ChatPanel({ t, premiseId, scenario, profile, utilityStatus, onNeeds = () => {}, risk = null }) {
   const [history, setHistory] = useState([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -44,7 +48,8 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
   const inputRef = useRef(null);
   const launcherRef = useRef(null);
   const gateRef = useRef(createRequestGate());
-  const contextKey = chatContextKey(premiseId, scenario, profile, utilityStatus);
+  // Declared needs are left out: ticking them here updates the app's profile, and that must not wipe this conversation.
+  const contextKey = chatContextKey(premiseId, scenario, { ...profile, declared_needs: undefined }, utilityStatus);
   const currentContextRef = useRef(contextKey);
   currentContextRef.current = contextKey;
   const suggestions = profile.declared_needs?.length
@@ -72,6 +77,30 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
     return () => cancelAnimationFrame(frame);
   }, [history, busy, error, open]);
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
+  // Page load: the robot bounces twice, then says hi in a small bubble for a few seconds (gone as soon as the chat
+  // opens). No bounce for people who turn animations off; they still get the bubble.
+  const [intro, setIntro] = useState("bounce");    // "bounce" -> "bubble" -> null
+  useEffect(() => {
+    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const bounced = still ? 300 : 1700;            // 0.5 s pause + 2 bounces of 0.6 s (styles.css .intro-bounce)
+    const toBubble = setTimeout(() => setIntro("bubble"), bounced);
+    const done = setTimeout(() => setIntro(null), bounced + 8000);
+    return () => { clearTimeout(toBubble); clearTimeout(done); };
+  }, []);
+  useEffect(() => { if (open) setIntro(null); }, [open]);
+  // Phone app: the chat is a full-screen sheet sized to the VISIBLE part of the screen, so the on-screen keyboard
+  // never covers the text box (iPhones shrink only the visual viewport when the keyboard opens). src/app/app.css
+  // reads --chat-top / --chat-h; the web app ignores them.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!open || !vv) return undefined;
+    const root = document.documentElement.style;
+    const fit = () => { root.setProperty("--chat-top", `${vv.offsetTop}px`); root.setProperty("--chat-h", `${vv.height}px`); };
+    fit();
+    vv.addEventListener("resize", fit);
+    vv.addEventListener("scroll", fit);
+    return () => { vv.removeEventListener("resize", fit); vv.removeEventListener("scroll", fit); };
+  }, [open]);
   useEffect(() => { if (premiseId) setNeedHome(false); }, [premiseId]);
 
   const close = () => { setOpen(false); launcherRef.current?.focus(); };
@@ -111,9 +140,35 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
 
   const preparationQuestion = (question) => /prepare|preparation/i.test(question);
 
+  // A fixed reply (no AI call), shown after "Jed is thinking..." for 1-2 s like a real answer. Goes through the request
+  // gate, so changing the home or scenario meanwhile drops the reply, as it would a real one.
+  const cannedReply = (question, reply) => {
+    const next = boundedHistory(history, question);
+    const token = gateRef.current.begin(contextKey);
+    if (!token) return;
+    setNeedHome(false); setHistory(next); setText(""); setBusy(true);
+    setTimeout(() => {
+      if (gateRef.current.isCurrent(token, currentContextRef.current))
+        setHistory([...next, { role: "assistant", content: [{ text: reply }] }]);
+      if (gateRef.current.finish(token)) setBusy(false);
+    }, 1000 + Math.random() * 1000);
+  };
+
   const ask = (value) => {
     const question = value.trim();
     if (!question || gateRef.current.isInFlight()) return;
+    // Hardcoded (team request): asking about a street address ("Nans Lane") -> Jed explains we never look homes up by
+    // address and asks for the Premise ID. Works before a home is chosen, since that's when people try an address.
+    if (/\bnan'?s\s+(lane|ln)\b/i.test(question)) { cannedReply(question, t.addressPrivacyReply); return; }
+    // Hardcoded (team request): any message mentioning "PS5" -> Jed says it's unlikely they can play during the storm
+    // (no AI call). With a Moderate-or-worse home it gives the engine's own risk and outage length as the reason;
+    // otherwise (Low risk, or no home chosen yet) the same answer without numbers, so it never contradicts the risk.
+    if (/ps\s?5/i.test(question)) {
+      cannedReply(question, premiseId && risk && RISKY_BANDS.has(risk.band)
+        ? t.ps5Reply(t.bands[risk.band].toLowerCase(), Math.round(risk.probability * 100), risk.range)
+        : t.ps5ReplyGeneral);
+      return;
+    }
     if (!premiseId) { setNeedHome(true); return; }
     if (preparationQuestion(question) && !profile.declared_needs?.length) {
       setSelectedPreparationNeeds([]);
@@ -138,6 +193,7 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
     };
     setPreparationNeeds(null);
     setText("");
+    if (selectedPreparationNeeds.length) onNeeds(requestProfile.declared_needs);
     submitHistory(next, preparationNeeds, requestProfile);
   };
   const retry = () => {
@@ -148,10 +204,13 @@ export default function ChatPanel({ t, premiseId, scenario, profile, utilityStat
   const send = (e) => { e.preventDefault(); ask(text); };
 
   return (<>
-    <button ref={launcherRef} type="button" className="chat-launcher" onClick={() => (open ? close() : setOpen(true))}
+    <button ref={launcherRef} type="button" className={`chat-launcher${intro === "bounce" ? " intro-bounce" : ""}`}
+      onClick={() => (open ? close() : setOpen(true))}
       aria-label={open ? t.chatClose : t.chatOpen} aria-expanded={open}
       aria-controls="chat-window" title={t.chatTitle}>
       <RobotIcon />
+      {/* Greeting bubble (visual only; the button's label already says what it does). Tapping it opens the chat. */}
+      {intro === "bubble" && <span className="jed-bubble" aria-hidden="true">{t.chatGreeting}</span>}
     </button>
     <section id="chat-window" className="chat" aria-label={t.chatTitle} hidden={!open}
       onKeyDown={(e) => { if (e.key === "Escape") close(); }} aria-busy={busy}>
